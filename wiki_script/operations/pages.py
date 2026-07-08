@@ -155,6 +155,24 @@ query ListPages($orderBy: PageOrderBy) {
 }
 """
 
+_SEARCH_PAGES = """
+query SearchPages($query: String!, $locale: String) {
+  pages {
+    search(query: $query, locale: $locale) {
+      results {
+        id
+        path
+        title
+        description
+        locale
+      }
+      suggestions
+      totalHits
+    }
+  }
+}
+"""
+
 
 class PagesManager:
     """Handles page CRUD operations against the Wiki.js GraphQL API.
@@ -288,7 +306,7 @@ class PagesManager:
         result = self.client.execute(
             _GET_PAGE_BY_PATH, variable_values={"path": path, "locale": locale}
         )
-        return self._parse_single_page(result)
+        return self._parse_single_page(result, key="singleByPath")
 
     def list_all(self, order_by: str = "TITLE") -> list[Page]:
         """Fetch a list of all pages.
@@ -319,6 +337,35 @@ class PagesManager:
                 tags=raw.get("tags", []),
             ))
         return pages
+
+    def search(self, query: str, locale: str = "en") -> list[Page]:
+        """Search pages by keyword.
+
+        Args:
+            query: Search query string.
+            locale: Locale to search in (default: 'en').
+
+        Returns:
+            List of matching Page objects.
+
+        Raises:
+            WikiJSError: If the query fails.
+        """
+        result = self.client.execute(
+            _SEARCH_PAGES, variable_values={"query": query, "locale": locale}
+        )
+        search_data = result.get("pages", {}).get("search", {})
+        raw_results = search_data.get("results", [])
+        return [
+            Page(
+                id=r.get("id"),
+                path=r.get("path", ""),
+                title=r.get("title", ""),
+                description=r.get("description", ""),
+                locale=r.get("locale", "en"),
+            )
+            for r in raw_results
+        ]
 
     def _parse_response(self, result: dict, operation: str) -> PageResponse:
         """Parse the response from a page create/update mutation.
@@ -355,11 +402,12 @@ class PagesManager:
             page=page,
         )
 
-    def _parse_single_page(self, result: dict) -> Page:
+    def _parse_single_page(self, result: dict, key: str = "single") -> Page:
         """Parse the response from a single page query.
 
         Args:
             result: Raw GraphQL response data.
+            key: The response key to look up ('single' or 'singleByPath').
 
         Returns:
             Page object populated with data.
@@ -367,7 +415,7 @@ class PagesManager:
         Raises:
             WikiJSError: If no page data is found.
         """
-        raw_page = result.get("pages", {}).get("single")
+        raw_page = result.get("pages", {}).get(key)
 
         if not raw_page:
             raise WikiJSError("Page not found.")

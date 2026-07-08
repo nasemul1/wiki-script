@@ -25,7 +25,7 @@ def main() -> None:
     parser.add_argument("--append-content", help="Append text to existing content")
     parser.add_argument("--description", help="New description")
     parser.add_argument("--tags", help="Comma-separated tags (replaces existing)")
-    parser.add_argument("--published", type=bool, help="Set published status")
+    parser.add_argument("--published", action=argparse.BooleanOptionalAction, help="Set published status")
 
     args = parser.parse_args()
 

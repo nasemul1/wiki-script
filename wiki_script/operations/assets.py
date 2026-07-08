@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 from pathlib import Path
 
 import requests
@@ -60,13 +61,14 @@ class AssetsManager:
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
         metadata = json.dumps({"folderId": folder_id})
+        mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
 
         with open(path, "rb") as f:
             files = {
                 "mediaUpload": (
                     path.name,
                     f,
-                    "application/octet-stream",
+                    mime_type,
                 ),
             }
             data = {"mediaUpload": metadata}
@@ -87,7 +89,11 @@ class AssetsManager:
                 f"Upload failed with status {response.status_code}: {response.text}"
             )
 
+        resp_data = response.json() if response.text else {}
         return Asset(
+            id=resp_data.get("id"),
             filename=path.name,
             folder=f"/{folder_id}" if folder_id else "/",
+            mime=mime_type,
+            fileSize=path.stat().st_size,
         )

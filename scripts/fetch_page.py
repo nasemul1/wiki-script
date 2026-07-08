@@ -29,7 +29,7 @@ def main() -> None:
         client = WikiJSClient()
         pages = PagesManager(client)
 
-        if args.id:
+        if args.id is not None:
             page = pages.get_by_id(args.id)
         else:
             page = pages.get_by_path(args.path, locale=args.locale)
