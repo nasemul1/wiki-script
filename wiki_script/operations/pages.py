@@ -109,22 +109,43 @@ query GetPageById($id: Int!) {
       isPublished
       isPrivate
       locale
-      tags
+      tags {
+        tag
+      }
     }
   }
 }
 """
 
 _GET_PAGE_BY_PATH = """
-query GetPageByPath($path: String, $locale: String) {
+query GetPageByPath($path: String!, $locale: String!) {
   pages {
-    single(path: $path, locale: $locale) {
+    singleByPath(path: $path, locale: $locale) {
       id
       path
       title
       description
       content
       editor
+      isPublished
+      isPrivate
+      locale
+      tags {
+        tag
+      }
+    }
+  }
+}
+"""
+
+_LIST_PAGES = """
+query ListPages($orderBy: PageOrderBy) {
+  pages {
+    list(orderBy: $orderBy) {
+      id
+      path
+      title
+      description
       isPublished
       isPrivate
       locale
@@ -269,6 +290,36 @@ class PagesManager:
         )
         return self._parse_single_page(result)
 
+    def list_all(self, order_by: str = "TITLE") -> list[Page]:
+        """Fetch a list of all pages.
+
+        Args:
+            order_by: Sort order - TITLE, PATH, CREATED, UPDATED (default: TITLE).
+
+        Returns:
+            List of Page objects.
+
+        Raises:
+            WikiJSError: If the query fails.
+        """
+        result = self.client.execute(
+            _LIST_PAGES, variable_values={"orderBy": order_by}
+        )
+        raw_pages = result.get("pages", {}).get("list", [])
+        pages = []
+        for raw in raw_pages:
+            pages.append(Page(
+                id=raw.get("id"),
+                path=raw.get("path", ""),
+                title=raw.get("title", ""),
+                description=raw.get("description", ""),
+                isPublished=raw.get("isPublished", True),
+                isPrivate=raw.get("isPrivate", False),
+                locale=raw.get("locale", "en"),
+                tags=raw.get("tags", []),
+            ))
+        return pages
+
     def _parse_response(self, result: dict, operation: str) -> PageResponse:
         """Parse the response from a page create/update mutation.
 
@@ -321,6 +372,12 @@ class PagesManager:
         if not raw_page:
             raise WikiJSError("Page not found.")
 
+        raw_tags = raw_page.get("tags", [])
+        if raw_tags and isinstance(raw_tags[0], dict):
+            tags = [t["tag"] for t in raw_tags if "tag" in t]
+        else:
+            tags = raw_tags
+
         return Page(
             id=raw_page.get("id"),
             path=raw_page.get("path", ""),
@@ -331,5 +388,5 @@ class PagesManager:
             isPublished=raw_page.get("isPublished", True),
             isPrivate=raw_page.get("isPrivate", False),
             locale=raw_page.get("locale", "en"),
-            tags=raw_page.get("tags", []),
+            tags=tags,
         )
