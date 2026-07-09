@@ -318,12 +318,35 @@ def feature_name(pages: PagesManager) -> None:
 =========================================
        Wiki.js Manager
 =========================================
+  --- Pages ---
   1. Create Page
   2. Fetch Page
   3. Update Page
   4. Delete Page
-  5. Upload Asset
-  6. List All Pages
+  5. List Pages
+  6. Search Pages
+  7. Browse Pages (tree)
+  8. Move/Rename Page
+  9. Clone Page
+  10. Export Page to File
+  11. Import Page from File
+
+  --- History ---
+  12. View Page History
+  13. View Specific Revision
+  14. Diff Two Revisions
+  15. Restore Revision
+
+  --- Assets ---
+  16. Upload Asset
+  17. List Assets
+  18. Download Asset
+  19. Delete Asset
+  20. List Folders
+  21. Create Folder
+
+  --- System ---
+  22. Test Connection
   0. Exit
 =========================================
 ```

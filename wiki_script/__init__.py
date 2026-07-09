@@ -2,7 +2,7 @@
 
 from wiki_script.wiki_client import WikiJSClient
 from wiki_script.exceptions import WikiJSError
-from wiki_script.models import Page, Asset, AssetFolder, PageResponse
+from wiki_script.models import Page, Asset, AssetFolder, PageResponse, PageHistory, PageVersion
 from wiki_script.operations.pages import PagesManager
 from wiki_script.operations.assets import AssetsManager
 
@@ -13,6 +13,8 @@ __all__ = [
     "Asset",
     "AssetFolder",
     "PageResponse",
+    "PageHistory",
+    "PageVersion",
     "PagesManager",
     "AssetsManager",
 ]

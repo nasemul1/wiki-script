@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import difflib
+import os
 import sys
 from urllib.parse import urlparse
 
 from wiki_script.exceptions import WikiJSError
-from wiki_script.models import Asset, AssetFolder, Page
+from wiki_script.models import Asset, AssetFolder, Page, PageHistory, PageVersion
 from wiki_script.operations.assets import AssetsManager
 from wiki_script.operations.pages import PagesManager
 from wiki_script.wiki_client import WikiJSClient
@@ -26,16 +28,27 @@ MENU = """
   5. List Pages
   6. Search Pages
   7. Browse Pages (tree)
+  8. Move/Rename Page
+  9. Clone Page
+  10. Export Page to File
+  11. Import Page from File
+
+  --- History ---
+  12. View Page History
+  13. View Specific Revision
+  14. Diff Two Revisions
+  15. Restore Revision
 
   --- Assets ---
-  8.  Upload Asset
-  9.  List Assets
-  10. Download Asset
-  11. Delete Asset
-  12. List Folders
-  13. Create Folder
+  16. Upload Asset
+  17. List Assets
+  18. Download Asset
+  19. Delete Asset
+  20. List Folders
+  21. Create Folder
 
   --- System ---
+  22. Test Connection
   0. Exit
 =========================================
 """
@@ -96,6 +109,17 @@ def format_size(size_bytes: int) -> str:
     elif size_bytes < 1024 * 1024 * 1024:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
     return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+def print_history_table(entries: list[PageHistory], total: int) -> None:
+    if not entries:
+        print("\nNo history entries found.")
+        return
+    print(f"\n{'VerID':<8} {'Date':<22} {'Author':<20} {'Action'}")
+    print("-" * 70)
+    for h in entries:
+        date = h.versionDate[:19] if h.versionDate else ""
+        print(f"{h.versionId:<8} {date:<22} {h.authorName:<20} {h.actionType}")
 
 
 # --- Page Operations ---
@@ -224,6 +248,13 @@ def list_pages(pages: PagesManager) -> None:
         print("\nNo pages found.")
         return
 
+    filter_tag = input_with_default("Filter by tag (leave blank for all)", "")
+    if filter_tag:
+        result = [p for p in result if filter_tag.lower() in [t.lower() for t in p.tags]]
+        if not result:
+            print(f"\nNo pages found with tag '{filter_tag}'.")
+            return
+
     total = len(result)
     offset = 0
 
@@ -255,6 +286,13 @@ def search_pages(pages: PagesManager) -> None:
     if not result:
         print("\nNo pages found.")
         return
+
+    filter_tag = input_with_default("Filter by tag (leave blank for all)", "")
+    if filter_tag:
+        result = [p for p in result if filter_tag.lower() in [t.lower() for t in p.tags]]
+        if not result:
+            print(f"\nNo pages found with tag '{filter_tag}'.")
+            return
 
     print_page_table(result)
     print(f"\nTotal: {len(result)} page(s)")
@@ -303,6 +341,265 @@ def browse_tree(pages: PagesManager) -> None:
         print(f"Private:     {page.isPrivate}")
         print(f"---")
         print(page.content)
+
+
+def move_rename_page(pages: PagesManager) -> None:
+    raw = input("Page ID: ").strip()
+    if not raw.isdigit():
+        print("Invalid ID.")
+        return
+    page_id = int(raw)
+
+    existing = pages.get_by_id(page_id)
+    print(f"\nCurrent path: {existing.path}")
+    print(f"Current title: {existing.title}")
+
+    new_path = input_with_default("New path (leave blank to keep)", existing.path)
+    new_title = input_with_default("New title (leave blank to keep)", existing.title)
+
+    if new_path == existing.path and new_title == existing.title:
+        print("\nNo changes made.")
+        return
+
+    print(f"\nThis will move/rename:")
+    print(f"  {existing.path}  →  {new_path}")
+    if new_title != existing.title:
+        print(f"  Title: {existing.title}  →  {new_title}")
+    confirm = input("\nContinue? (yes/no): ").strip().lower()
+    if confirm != "yes":
+        print("Cancelled.")
+        return
+
+    existing.path = new_path
+    existing.title = new_title
+    response = pages.update(existing)
+    print(f"\nMoved page {page_id} to: {new_path}")
+
+
+def clone_page(pages: PagesManager) -> None:
+    raw = input("Source page ID: ").strip()
+    if not raw.isdigit():
+        print("Invalid ID.")
+        return
+    source_id = int(raw)
+
+    source = pages.get_by_id(source_id)
+    print(f"\nSource: {source.path} — {source.title}")
+
+    new_path = input("New path for clone: ").strip()
+    if not new_path:
+        print("Path is required.")
+        return
+    new_title = input_with_default("New title", source.title)
+
+    response = pages.clone_page(source_id, new_path, new_title)
+    clone_id = response.page.id if response.page else "?"
+    print(f"\nCloned page (id={clone_id}): {new_path}")
+
+
+def export_page(pages: PagesManager) -> None:
+    raw = input("Page ID: ").strip()
+    if not raw.isdigit():
+        print("Invalid ID.")
+        return
+    page = pages.get_by_id(int(raw))
+
+    default_filename = page.path.replace("/", "_") + ".md"
+    filename = input_with_default("Export filename", default_filename)
+
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(f"---\n")
+        f.write(f"title: {page.title}\n")
+        f.write(f"path: {page.path}\n")
+        f.write(f"description: {page.description}\n")
+        f.write(f"tags: [{', '.join(page.tags)}]\n")
+        f.write(f"published: {page.isPublished}\n")
+        f.write(f"private: {page.isPrivate}\n")
+        f.write(f"locale: {page.locale}\n")
+        f.write(f"editor: {page.editor}\n")
+        f.write(f"---\n\n")
+        f.write(page.content)
+
+    print(f"\nExported page {page.id} to: {filename}")
+
+
+def import_page(pages: PagesManager) -> None:
+    filename = input("Markdown file path: ").strip()
+    if not filename:
+        print("Filename is required.")
+        return
+    if not os.path.isfile(filename):
+        print(f"File not found: {filename}")
+        return
+
+    with open(filename, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    has_frontmatter = content.startswith("---")
+    meta: dict[str, str] = {}
+    if has_frontmatter:
+        end = content.find("---", 3)
+        if end != -1:
+            frontmatter = content[3:end].strip()
+            for line in frontmatter.splitlines():
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    meta[key.strip()] = value.strip()
+            content = content[end + 3:].strip()
+
+    path = meta.get("path", "")
+    if not path:
+        path = input("Page path: ").strip()
+    title = meta.get("title", "")
+    if not title:
+        title = input("Page title: ").strip()
+    if not path or not title:
+        print("Path and title are required.")
+        return
+
+    description = meta.get("description", "")
+    tags_str = meta.get("tags", "")
+    tags = [t.strip() for t in tags_str.strip("[]").split(",") if t.strip()] if tags_str else []
+
+    page = Page(
+        path=path,
+        title=title,
+        content=content,
+        description=description,
+        locale=meta.get("locale", "en"),
+        isPublished=meta.get("published", "true").lower() == "true",
+        isPrivate=meta.get("private", "false").lower() == "true",
+        tags=tags,
+        editor=meta.get("editor", "markdown"),
+    )
+
+    response = pages.create(page)
+    page_id = response.page.id if response.page else "?"
+    print(f"\nImported page (id={page_id}): {path}")
+
+
+# --- History Operations ---
+
+def view_page_history(pages: PagesManager) -> None:
+    raw = input("Page ID: ").strip()
+    if not raw.isdigit():
+        print("Invalid ID.")
+        return
+    page_id = int(raw)
+
+    page = pages.get_by_id(page_id)
+    print(f"\nPage: {page.title} (path: {page.path})")
+
+    offset_page = 0
+    while True:
+        entries, total = pages.get_history(page_id, offset_page=offset_page, offset_size=PAGE_SIZE)
+        if not entries:
+            if offset_page == 0:
+                print("\nNo history entries found.")
+            return
+
+        print_history_table(entries, total)
+        remaining = total - (offset_page + 1) * PAGE_SIZE
+        if remaining <= 0:
+            break
+        print(f"\n  Showing {offset_page * PAGE_SIZE + 1}-{offset_page * PAGE_SIZE + len(entries)} of {total} "
+              f"({remaining} more)")
+        cmd = input("  [Enter] next page, [q] quit: ").strip().lower()
+        if cmd == "q":
+            break
+        offset_page += 1
+
+    print(f"\nTotal: {total} revision(s)")
+
+
+def view_specific_revision(pages: PagesManager) -> None:
+    raw_page = input("Page ID: ").strip()
+    if not raw_page.isdigit():
+        print("Invalid page ID.")
+        return
+    raw_ver = input("Version ID: ").strip()
+    if not raw_ver.isdigit():
+        print("Invalid version ID.")
+        return
+
+    version = pages.get_version(int(raw_page), int(raw_ver))
+
+    print(f"\n{'='*60}")
+    print(f"Version:   {version.versionId}")
+    print(f"Date:      {version.versionDate}")
+    print(f"Author:    {version.authorName}")
+    print(f"Action:    {version.action}")
+    print(f"Path:      {version.path}")
+    print(f"Title:     {version.title}")
+    print(f"Tags:      {version.tags}")
+    print(f"Published: {version.isPublished}")
+    print(f"{'='*60}")
+    print(version.content)
+
+
+def diff_two_revisions(pages: PagesManager) -> None:
+    raw_page = input("Page ID: ").strip()
+    if not raw_page.isdigit():
+        print("Invalid page ID.")
+        return
+    raw_ver1 = input("First version ID (older): ").strip()
+    if not raw_ver1.isdigit():
+        print("Invalid version ID.")
+        return
+    raw_ver2 = input("Second version ID (newer): ").strip()
+    if not raw_ver2.isdigit():
+        print("Invalid version ID.")
+        return
+
+    page_id = int(raw_page)
+    v1 = pages.get_version(page_id, int(raw_ver1))
+    v2 = pages.get_version(page_id, int(raw_ver2))
+
+    old_label = f"v{v1.versionId} ({v1.versionDate[:10] if v1.versionDate else '?'})"
+    new_label = f"v{v2.versionId} ({v2.versionDate[:10] if v2.versionDate else '?'})"
+
+    old_lines = v1.content.splitlines(keepends=True)
+    new_lines = v2.content.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(old_lines, new_lines, fromfile=old_label, tofile=new_label)
+
+    diff_output = "".join(diff)
+    if not diff_output:
+        print("\nNo differences found between these versions.")
+        return
+
+    print(f"\n--- {old_label}")
+    print(f"+++ {new_label}")
+    print(diff_output)
+
+
+def restore_revision(pages: PagesManager) -> None:
+    raw_page = input("Page ID: ").strip()
+    if not raw_page.isdigit():
+        print("Invalid page ID.")
+        return
+    raw_ver = input("Version ID to restore: ").strip()
+    if not raw_ver.isdigit():
+        print("Invalid version ID.")
+        return
+
+    page_id = int(raw_page)
+    version_id = int(raw_ver)
+
+    version = pages.get_version(page_id, version_id)
+    print(f"\nThis will restore page to:")
+    print(f"  Version: {version.versionId}")
+    print(f"  Date:    {version.versionDate}")
+    print(f"  Title:   {version.title}")
+    print(f"  Author:  {version.authorName}")
+
+    confirm = input("\nAre you sure? (yes/no): ").strip().lower()
+    if confirm != "yes":
+        print("Cancelled.")
+        return
+
+    pages.restore_version(page_id, version_id)
+    print(f"\nPage restored to version {version_id}.")
 
 
 # --- Asset Operations ---
@@ -382,6 +679,23 @@ def create_folder(client: WikiJSClient) -> None:
     print(f"\nCreated folder: /{slug}")
 
 
+def test_connection(client: WikiJSClient, pages: PagesManager) -> None:
+    print("\nTesting connection...")
+    print(f"URL: {client.url}")
+
+    try:
+        result = pages.list_all(order_by="CREATED")
+        print(f"Pages accessible: {len(result)}")
+
+        if result:
+            print(f"Most recently created: {result[0].path} — {result[0].title}")
+    except WikiJSError as exc:
+        print(f"Error: {exc}")
+        return
+
+    print("Connection OK.")
+
+
 # --- Main ---
 
 def main() -> None:
@@ -400,12 +714,21 @@ def main() -> None:
         "5": ("List Pages", lambda: list_pages(pages)),
         "6": ("Search Pages", lambda: search_pages(pages)),
         "7": ("Browse Pages (tree)", lambda: browse_tree(pages)),
-        "8": ("Upload Asset", lambda: upload_asset(client)),
-        "9": ("List Assets", lambda: list_assets(client)),
-        "10": ("Download Asset", lambda: download_asset(client)),
-        "11": ("Delete Asset", lambda: delete_asset(client)),
-        "12": ("List Folders", lambda: list_folders(client)),
-        "13": ("Create Folder", lambda: create_folder(client)),
+        "8": ("Move/Rename Page", lambda: move_rename_page(pages)),
+        "9": ("Clone Page", lambda: clone_page(pages)),
+        "10": ("Export Page to File", lambda: export_page(pages)),
+        "11": ("Import Page from File", lambda: import_page(pages)),
+        "12": ("View Page History", lambda: view_page_history(pages)),
+        "13": ("View Specific Revision", lambda: view_specific_revision(pages)),
+        "14": ("Diff Two Revisions", lambda: diff_two_revisions(pages)),
+        "15": ("Restore Revision", lambda: restore_revision(pages)),
+        "16": ("Upload Asset", lambda: upload_asset(client)),
+        "17": ("List Assets", lambda: list_assets(client)),
+        "18": ("Download Asset", lambda: download_asset(client)),
+        "19": ("Delete Asset", lambda: delete_asset(client)),
+        "20": ("List Folders", lambda: list_folders(client)),
+        "21": ("Create Folder", lambda: create_folder(client)),
+        "22": ("Test Connection", lambda: test_connection(client, pages)),
     }
 
     while True:

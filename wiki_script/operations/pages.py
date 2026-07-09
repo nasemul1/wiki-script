@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from wiki_script.exceptions import WikiJSError
-from wiki_script.models import Page, PageResponse
+from wiki_script.models import Page, PageHistory, PageResponse, PageVersion
 from wiki_script.wiki_client import WikiJSClient
 
 _CREATE_PAGE = """
@@ -55,6 +55,7 @@ mutation UpdatePage(
   $isPublished: Boolean!
   $tags: [String!]!
   $title: String!
+  $path: String!
 ) {
   pages {
     update(
@@ -66,6 +67,7 @@ mutation UpdatePage(
       isPublished: $isPublished
       tags: $tags
       title: $title
+      path: $path
     ) {
       responseResult {
         succeeded
@@ -173,6 +175,64 @@ query SearchPages($query: String!, $locale: String) {
 }
 """
 
+_GET_PAGE_HISTORY = """
+query GetPageHistory($id: Int!, $offsetPage: Int, $offsetSize: Int) {
+  pages {
+    history(id: $id, offsetPage: $offsetPage, offsetSize: $offsetSize) {
+      trail {
+        versionId
+        versionDate
+        authorId
+        authorName
+        actionType
+        valueBefore
+        valueAfter
+      }
+      total
+    }
+  }
+}
+"""
+
+_GET_PAGE_VERSION = """
+query GetPageVersion($pageId: Int!, $versionId: Int!) {
+  pages {
+    version(pageId: $pageId, versionId: $versionId) {
+      versionId
+      pageId
+      path
+      title
+      description
+      content
+      contentType
+      editor
+      locale
+      isPublished
+      isPrivate
+      tags
+      authorId
+      authorName
+      action
+      versionDate
+      createdAt
+    }
+  }
+}
+"""
+
+_RESTORE_PAGE_VERSION = """
+mutation RestorePageVersion($pageId: Int!, $versionId: Int!) {
+  pages {
+    restore(pageId: $pageId, versionId: $versionId) {
+      responseResult {
+        succeeded
+        message
+      }
+    }
+  }
+}
+"""
+
 
 class PagesManager:
     """Handles page CRUD operations against the Wiki.js GraphQL API.
@@ -247,6 +307,7 @@ class PagesManager:
             "isPublished": page.isPublished,
             "tags": page.tags,
             "title": page.title,
+            "path": page.path,
         }
 
         result = self.client.execute(_UPDATE_PAGE, variable_values=variables)
@@ -366,6 +427,152 @@ class PagesManager:
             )
             for r in raw_results
         ]
+
+    def get_history(self, page_id: int, offset_page: int = 0, offset_size: int = 100) -> tuple[list[PageHistory], int]:
+        """Fetch the revision history of a page.
+
+        Args:
+            page_id: The numeric ID of the page.
+            offset_page: Page number for pagination (0-based).
+            offset_size: Number of entries per page.
+
+        Returns:
+            Tuple of (list of PageHistory entries, total count).
+
+        Raises:
+            WikiJSError: If the query fails.
+        """
+        result = self.client.execute(
+            _GET_PAGE_HISTORY,
+            variable_values={"id": page_id, "offsetPage": offset_page, "offsetSize": offset_size},
+        )
+        history_data = result.get("pages", {}).get("history", {})
+        trail = history_data.get("trail", [])
+        total = history_data.get("total", 0)
+        entries = [
+            PageHistory(
+                versionId=h["versionId"],
+                versionDate=h.get("versionDate", ""),
+                authorId=h.get("authorId", 0),
+                authorName=h.get("authorName", ""),
+                actionType=h.get("actionType", ""),
+                valueBefore=h.get("valueBefore"),
+                valueAfter=h.get("valueAfter"),
+            )
+            for h in trail
+        ]
+        return entries, total
+
+    def get_version(self, page_id: int, version_id: int) -> PageVersion:
+        """Fetch a specific version/snapshot of a page.
+
+        Args:
+            page_id: The numeric ID of the page.
+            version_id: The version ID to fetch.
+
+        Returns:
+            PageVersion object with full content.
+
+        Raises:
+            WikiJSError: If the query fails or version not found.
+        """
+        result = self.client.execute(
+            _GET_PAGE_VERSION,
+            variable_values={"pageId": page_id, "versionId": version_id},
+        )
+        raw = result.get("pages", {}).get("version")
+        if not raw:
+            raise WikiJSError(f"Version {version_id} not found for page {page_id}.")
+        return PageVersion(
+            versionId=raw.get("versionId", 0),
+            pageId=raw.get("pageId", 0),
+            path=raw.get("path", ""),
+            title=raw.get("title", ""),
+            description=raw.get("description", ""),
+            content=raw.get("content", ""),
+            contentType=raw.get("contentType", ""),
+            editor=raw.get("editor", ""),
+            locale=raw.get("locale", ""),
+            isPublished=raw.get("isPublished", True),
+            isPrivate=raw.get("isPrivate", False),
+            tags=raw.get("tags", []),
+            authorId=raw.get("authorId", ""),
+            authorName=raw.get("authorName", ""),
+            action=raw.get("action", ""),
+            versionDate=raw.get("versionDate", ""),
+            createdAt=raw.get("createdAt", ""),
+        )
+
+    def restore_version(self, page_id: int, version_id: int) -> bool:
+        """Restore a page to a specific version.
+
+        Args:
+            page_id: The numeric ID of the page.
+            version_id: The version ID to restore.
+
+        Returns:
+            True on success.
+
+        Raises:
+            WikiJSError: If the restore fails.
+        """
+        result = self.client.execute(
+            _RESTORE_PAGE_VERSION,
+            variable_values={"pageId": page_id, "versionId": version_id},
+        )
+        response = result.get("pages", {}).get("restore", {}).get("responseResult", {})
+        if not response.get("succeeded"):
+            raise WikiJSError(f"Failed to restore version: {response.get('message', 'Unknown error')}")
+        return True
+
+    def move_or_rename(self, page_id: int, new_path: str) -> PageResponse:
+        """Move or rename a page by updating its path.
+
+        Fetches the page first, then updates with the new path.
+
+        Args:
+            page_id: The numeric ID of the page.
+            new_path: The new path for the page.
+
+        Returns:
+            PageResponse with the updated page.
+
+        Raises:
+            WikiJSError: If the fetch or update fails.
+        """
+        page = self.get_by_id(page_id)
+        page.path = new_path
+        return self.update(page)
+
+    def clone_page(self, source_id: int, new_path: str, new_title: str) -> PageResponse:
+        """Clone a page to a new path with a new title.
+
+        Fetches the source page and creates a copy at the new path.
+
+        Args:
+            source_id: The numeric ID of the source page.
+            new_path: The path for the new cloned page.
+            new_title: The title for the new cloned page.
+
+        Returns:
+            PageResponse with the created clone.
+
+        Raises:
+            WikiJSError: If the fetch or create fails.
+        """
+        source = self.get_by_id(source_id)
+        new_page = Page(
+            path=new_path,
+            title=new_title,
+            content=source.content,
+            description=source.description,
+            editor=source.editor,
+            isPublished=source.isPublished,
+            isPrivate=source.isPrivate,
+            locale=source.locale,
+            tags=source.tags,
+        )
+        return self.create(new_page)
 
     def _parse_response(self, result: dict, operation: str) -> PageResponse:
         """Parse the response from a page create/update mutation.

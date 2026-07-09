@@ -48,3 +48,39 @@ class AssetFolder(BaseModel):
     id: int | None = None
     slug: str = ""
     name: str = ""
+
+
+class PageHistory(BaseModel):
+    """Represents a single entry in a page's revision history."""
+
+    versionId: int = 0
+    versionDate: str = ""
+    authorId: int = 0
+    authorName: str = ""
+    actionType: str = ""
+    valueBefore: str | None = None
+    valueAfter: str | None = None
+
+
+class PageVersion(BaseModel):
+    """Represents a specific version/snapshot of a page."""
+
+    versionId: int = 0
+    pageId: int = 0
+    path: str = ""
+    title: str = ""
+    description: str = ""
+    content: str = ""
+    contentType: str = ""
+    editor: str = ""
+    locale: str = ""
+    isPublished: bool = True
+    isPrivate: bool = False
+    tags: list[str] = []
+    authorId: str = ""
+    authorName: str = ""
+    action: str = ""
+    versionDate: str = ""
+    createdAt: str = ""
+    publishStartDate: str = ""
+    publishEndDate: str = ""
