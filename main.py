@@ -6,11 +6,9 @@ from __future__ import annotations
 import difflib
 import os
 import sys
-from urllib.parse import urlparse
 
 from wiki_script.exceptions import WikiJSError
-from wiki_script.models import Asset, AssetFolder, Page, PageHistory, PageVersion
-from wiki_script.operations.assets import AssetsManager
+from wiki_script.models import Page, PageHistory, PageVersion
 from wiki_script.operations.pages import PagesManager
 from wiki_script.wiki_client import WikiJSClient
 
@@ -39,16 +37,8 @@ MENU = """
   14. Diff Two Revisions
   15. Restore Revision
 
-  --- Assets ---
-  16. Upload Asset
-  17. List Assets
-  18. Download Asset
-  19. Delete Asset
-  20. List Folders
-  21. Create Folder
-
   --- System ---
-  22. Test Connection
+  16. Test Connection
   0. Exit
 =========================================
 """
@@ -60,14 +50,6 @@ def input_with_default(prompt: str, default: str = "") -> str:
     return value if value else default
 
 
-def get_assets_manager(client: WikiJSClient) -> AssetsManager:
-    base_url = client.url
-    parsed = urlparse(base_url)
-    base_url = f"{parsed.scheme}://{parsed.netloc}"
-    assert client.api_key is not None
-    return AssetsManager(base_url=base_url, api_key=client.api_key)
-
-
 def print_page_table(page_list: list[Page]) -> None:
     if not page_list:
         print("\nNo pages found.")
@@ -77,38 +59,6 @@ def print_page_table(page_list: list[Page]) -> None:
     for p in page_list:
         pub = "Yes" if p.isPublished else "No"
         print(f"{p.id:<6} {p.path:<45} {p.title:<30} {pub}")
-
-
-def print_asset_table(asset_list: list[Asset]) -> None:
-    if not asset_list:
-        print("\nNo assets found.")
-        return
-    print(f"\n{'ID':<6} {'Filename':<35} {'Kind':<10} {'Size':<12} {'Folder'}")
-    print("-" * 80)
-    for a in asset_list:
-        size = format_size(a.fileSize)
-        folder = f"/{a.folderSlug}" if a.folderSlug else "/"
-        print(f"{a.id:<6} {a.filename:<35} {a.kind:<10} {size:<12} {folder}")
-
-
-def print_folder_table(folder_list: list[AssetFolder]) -> None:
-    if not folder_list:
-        print("\nNo folders found.")
-        return
-    print(f"\n{'ID':<6} {'Slug':<30} {'Name'}")
-    print("-" * 50)
-    for f in folder_list:
-        print(f"{f.id:<6} {f.slug:<30} {f.name}")
-
-
-def format_size(size_bytes: int) -> str:
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    elif size_bytes < 1024 * 1024 * 1024:
-        return f"{size_bytes / (1024 * 1024):.1f} MB"
-    return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
 
 
 def print_history_table(entries: list[PageHistory], total: int) -> None:
@@ -602,83 +552,6 @@ def restore_revision(pages: PagesManager) -> None:
     print(f"\nPage restored to version {version_id}.")
 
 
-# --- Asset Operations ---
-
-def upload_asset(client: WikiJSClient) -> None:
-    file_path = input("Local file path to upload: ").strip()
-    if not file_path:
-        print("File path is required.")
-        return
-    folder_id = input_with_default("Destination folder ID", "0")
-    assets = get_assets_manager(client)
-    asset = assets.upload(file_path, folder_id=int(folder_id))
-    print(f"\nUploaded: {asset.filename} (id={asset.id})")
-
-
-def list_assets(client: WikiJSClient) -> None:
-    folder_id = input_with_default("Folder ID (0 = root)", "0")
-    print("Filter:  1 = All, 2 = Images only, 3 = Binary only")
-    kind_choice = input("Choice [1]: ").strip() or "1"
-    kind_map = {"1": "ALL", "2": "IMAGE", "3": "BINARY"}
-    kind = kind_map.get(kind_choice, "ALL")
-
-    assets = get_assets_manager(client)
-    result = assets.list_assets(folder_id=int(folder_id), kind=kind)
-    print_asset_table(result)
-    print(f"\nTotal: {len(result)} asset(s)")
-
-
-def download_asset(client: WikiJSClient) -> None:
-    raw = input("Asset ID: ").strip()
-    if not raw.isdigit():
-        print("Invalid ID.")
-        return
-    filename = input("Asset filename: ").strip()
-    if not filename:
-        print("Filename is required.")
-        return
-    save_path = input_with_default("Save to path", filename)
-
-    assets = get_assets_manager(client)
-    path = assets.download(asset_id=int(raw), filename=filename, save_path=save_path)
-    print(f"\nDownloaded to: {path}")
-
-
-def delete_asset(client: WikiJSClient) -> None:
-    raw = input("Asset ID to delete: ").strip()
-    if not raw.isdigit():
-        print("Invalid ID.")
-        return
-    confirm = input(f"Are you sure you want to delete asset {raw}? (yes/no): ").strip().lower()
-    if confirm != "yes":
-        print("Cancelled.")
-        return
-    assets = get_assets_manager(client)
-    assets.delete_asset(int(raw))
-    print(f"\nDeleted asset {raw}.")
-
-
-def list_folders(client: WikiJSClient) -> None:
-    parent_id = input_with_default("Parent folder ID (0 = root)", "0")
-    assets = get_assets_manager(client)
-    result = assets.list_folders(parent_folder_id=int(parent_id))
-    print_folder_table(result)
-    print(f"\nTotal: {len(result)} folder(s)")
-
-
-def create_folder(client: WikiJSClient) -> None:
-    parent_id = input_with_default("Parent folder ID (0 = root)", "0")
-    slug = input("Folder slug (URL-safe): ").strip()
-    if not slug:
-        print("Slug is required.")
-        return
-    name = input_with_default("Display name", slug)
-
-    assets = get_assets_manager(client)
-    assets.create_folder(parent_folder_id=int(parent_id), slug=slug, name=name)
-    print(f"\nCreated folder: /{slug}")
-
-
 def test_connection(client: WikiJSClient, pages: PagesManager) -> None:
     print("\nTesting connection...")
     print(f"URL: {client.url}")
@@ -722,13 +595,7 @@ def main() -> None:
         "13": ("View Specific Revision", lambda: view_specific_revision(pages)),
         "14": ("Diff Two Revisions", lambda: diff_two_revisions(pages)),
         "15": ("Restore Revision", lambda: restore_revision(pages)),
-        "16": ("Upload Asset", lambda: upload_asset(client)),
-        "17": ("List Assets", lambda: list_assets(client)),
-        "18": ("Download Asset", lambda: download_asset(client)),
-        "19": ("Delete Asset", lambda: delete_asset(client)),
-        "20": ("List Folders", lambda: list_folders(client)),
-        "21": ("Create Folder", lambda: create_folder(client)),
-        "22": ("Test Connection", lambda: test_connection(client, pages)),
+        "16": ("Test Connection", lambda: test_connection(client, pages)),
     }
 
     while True:

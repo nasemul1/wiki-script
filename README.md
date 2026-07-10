@@ -1,6 +1,6 @@
 # wiki-script
 
-Terminal-based Wiki.js manager. Manage pages, assets, and revisions entirely from the CLI.
+Terminal-based Wiki.js manager. Manage pages and revisions entirely from the CLI.
 
 ## Installation
 
@@ -60,16 +60,8 @@ python main.py
   14. Diff Two Revisions
   15. Restore Revision
 
-  --- Assets ---
-  16. Upload Asset
-  17. List Assets
-  18. Download Asset
-  19. Delete Asset
-  20. List Folders
-  21. Create Folder
-
   --- System ---
-  22. Test Connection
+  16. Test Connection
   0. Exit
 =========================================
 ```
@@ -92,15 +84,12 @@ python scripts/update_page.py --id 15 --title "New Title" --published --no-priva
 
 # Delete a page
 python scripts/delete_page.py 15
-
-# Upload an asset
-python scripts/upload_asset.py document.pdf --folder-id 0
 ```
 
 ### As a Library
 
 ```python
-from wiki_script import WikiJSClient, Page, PagesManager, AssetsManager
+from wiki_script import WikiJSClient, Page, PagesManager
 
 client = WikiJSClient()
 pages = PagesManager(client)
@@ -131,13 +120,6 @@ version = pages.get_version(resp.page.id, history[0].versionId)
 pages.restore_version(resp.page.id, history[0].versionId)
 
 # Export/Import (file I/O)
-import difflib
-
-# Upload asset
-from urllib.parse import urlparse
-parsed = urlparse(client.url)
-assets = AssetsManager(f"{parsed.scheme}://{parsed.netloc}", client.api_key)
-assets.upload("photo.png", folder_id=0)
 
 # Delete
 pages.delete(resp.page.id)
@@ -160,12 +142,6 @@ pages.delete(resp.page.id)
 - **Diff**: Compare two revisions side by side
 - **Restore**: Rollback to any previous version
 
-### Assets
-- **Upload**: Upload files to asset folders
-- **List**: Browse assets by folder
-- **Download**: Save assets locally
-- **Folders**: Create and manage asset folders
-
 ### System
 - **Connection Test**: Verify API connectivity
 
@@ -178,17 +154,15 @@ wiki-script/
 │   ├── create_page.py
 │   ├── fetch_page.py
 │   ├── update_page.py
-│   ├── delete_page.py
-│   └── upload_asset.py
+│   └── delete_page.py
 ├── wiki_script/               # Core library
 │   ├── __init__.py
 │   ├── exceptions.py          # WikiJSError
-│   ├── models.py              # Page, Asset, PageHistory, PageVersion (Pydantic)
+│   ├── models.py              # Page, PageHistory, PageVersion (Pydantic)
 │   ├── wiki_client.py         # WikiJSClient (gql transport)
 │   └── operations/
 │       ├── __init__.py
-│       ├── pages.py           # PagesManager (GraphQL CRUD + history)
-│       └── assets.py          # AssetsManager (GraphQL + REST)
+│       └── pages.py           # PagesManager (GraphQL CRUD + history)
 ├── requirements.txt
 ├── pyproject.toml
 ├── .env.example
@@ -201,4 +175,3 @@ wiki-script/
 - gql[requests] — GraphQL client
 - pydantic — Data validation
 - python-dotenv — Environment variables
-- requests — HTTP client (asset uploads)

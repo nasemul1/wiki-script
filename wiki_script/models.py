@@ -27,29 +27,6 @@ class PageResponse(BaseModel):
     page: Page | None = None
 
 
-class Asset(BaseModel):
-    """Represents a Wiki.js asset (uploaded file)."""
-
-    id: int | None = None
-    filename: str = ""
-    ext: str = ""
-    kind: str = ""
-    mime: str = ""
-    fileSize: int = 0
-    folderId: int | None = None
-    folderSlug: str = ""
-    createdAt: str = ""
-    updatedAt: str = ""
-
-
-class AssetFolder(BaseModel):
-    """Represents a Wiki.js asset folder."""
-
-    id: int | None = None
-    slug: str = ""
-    name: str = ""
-
-
 class PageHistory(BaseModel):
     """Represents a single entry in a page's revision history."""
 

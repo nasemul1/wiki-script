@@ -11,7 +11,7 @@ bugs, planned features, and implementation rules.
 ## 1. Project Overview
 
 **Goal:** Build a full-featured terminal-based Wiki.js manager. Users should be able to
-manage pages, assets, and revisions entirely from the CLI — like a Linux file manager
+manage pages and revisions entirely from the CLI — like a Linux file manager
 but for a Wiki.js instance.
 
 **Tech stack:**
@@ -19,7 +19,6 @@ but for a Wiki.js instance.
 - `gql[requests]` for GraphQL
 - `pydantic` v2 for data models
 - `python-dotenv` for env config
-- `requests` for REST uploads (asset upload endpoint)
 
 **Wiki.js version:** 2.x (GraphQL API at `/graphql`, REST upload at `/u`)
 
@@ -34,17 +33,15 @@ wiki-script/
 │   ├── create_page.py
 │   ├── fetch_page.py
 │   ├── update_page.py
-│   ├── delete_page.py
-│   └── upload_asset.py
+│   └── delete_page.py
 ├── wiki_script/                   # Core library (importable)
-│   ├── __init__.py                # Exports: WikiJSClient, WikiJSError, Page, Asset, PageResponse, PagesManager, AssetsManager
+│   ├── __init__.py                # Exports: WikiJSClient, WikiJSError, Page, PageResponse, PagesManager
 │   ├── exceptions.py              # WikiJSError(message, errors)
-│   ├── models.py                  # Page, PageResponse, Asset (Pydantic BaseModel)
+│   ├── models.py                  # Page, PageResponse (Pydantic BaseModel)
 │   ├── wiki_client.py             # WikiJSClient — gql transport, execute()
 │   └── operations/
-│       ├── __init__.py            # Exports: PagesManager, AssetsManager
+│       ├── __init__.py            # Exports: PagesManager
 │       ├── pages.py               # PagesManager — CRUD + list
-│       └── assets.py              # AssetsManager — upload only
 ├── .env                           # WIKIJS_URL, WIKIJS_API_KEY
 ├── .env.example
 ├── requirements.txt               # gql[requests], python-dotenv, pydantic, requests
@@ -62,8 +59,7 @@ wiki-script/
 | 2 | Fetch Page (by ID or path) | **BROKEN** — see Bug #1 |
 | 3 | Update Page | Working |
 | 4 | Delete Page | Working |
-| 5 | Upload Asset | Working |
-| 6 | List All Pages | Working |
+| 5 | List All Pages | Working |
 | 0 | Exit | Working |
 
 ---
@@ -93,17 +89,6 @@ wiki-script/
 - **File:** `scripts/fetch_page.py` line 32
 - **Problem:** `if args.id:` is `False` when `--id 0` is passed
 - **Fix:** Use `if args.id is not None:`
-
-### Bug #5: Upload response not parsed
-- **File:** `wiki_script/operations/assets.py` line 90
-- **Problem:** `upload()` returns `Asset(filename=..., folder=...)` but never parses
-  the response JSON to get `id`, `mime`, `fileSize`
-- **Fix:** Parse `response.json()` and populate all Asset fields
-
-### Bug #6: Hardcoded MIME type
-- **File:** `wiki_script/operations/assets.py` line 69
-- **Problem:** Always sends `"application/octet-stream"` regardless of actual file type
-- **Fix:** Use `mimetypes.guess_type()` to detect the MIME type
 
 ---
 
@@ -149,10 +134,6 @@ mutation { pages { delete(id: $id) { responseResult { succeeded message } } } }
 - `pages.single` and `pages.singleByPath` return `tags` as `[PageTag]` — needs `{ tag }` subfield selection
 - `pages.search` returns `tags` as `[String]`
 
-### Asset REST Endpoint
-- Upload: `POST /u` with multipart form data, field `mediaUpload` for file + metadata JSON
-- No GraphQL mutations for assets — must use REST
-
 ---
 
 ## 6. Features to Implement
@@ -192,28 +173,7 @@ mutation { pages { delete(id: $id) { responseResult { succeeded message } } } }
 - Allow selecting a page from the tree to view/edit/delete it
 - For 1000+ pages, lazy-load or filter as user types
 
-### Phase 2: Asset Management
-
-#### 2.1 List Assets
-- Research Wiki.js asset listing API (likely GraphQL `assets { list }`)
-- Add `_LIST_ASSETS` query to `assets.py`
-- Add `list_all(folder_id)` method to `AssetsManager`
-- Display in table: ID, filename, folder, MIME type, size
-
-#### 2.2 Download Asset
-- Research Wiki.js asset download endpoint (likely REST `/u/{id}`)
-- Add `download(asset_id, save_path)` method
-- Stream download for large files
-
-#### 2.3 Delete Asset
-- Research Wiki.js asset delete mutation
-- Add `delete(asset_id)` method with confirmation prompt
-
-#### 2.4 Asset Folder Management
-- Research folder listing/creation API
-- Add list/create/delete folder operations
-
-### Phase 3: Page History
+### Phase 2: Page History
 
 #### 3.1 View Revision History
 - Add `_PAGE_HISTORY` query
@@ -235,7 +195,7 @@ mutation { pages { delete(id: $id) { responseResult { succeeded message } } } }
 - Update page with that content via `pages.update`
 - Add confirmation prompt
 
-### Phase 4: Quality of Life
+### Phase 3: Quality of Life
 
 #### 4.1 Move/Rename Page
 - Use `pages.update` to change the path field
@@ -258,7 +218,7 @@ mutation { pages { delete(id: $id) { responseResult { succeeded message } } } }
 - Add `--tags` filter to list and search
 - Use GraphQL `list` with local filtering if API doesn't support server-side tag filter
 
-### Phase 5: Packaging & Polish
+### Phase 4: Packaging & Polish
 
 #### 5.1 Add pyproject.toml
 - Define `[project]` metadata
@@ -337,16 +297,8 @@ def feature_name(pages: PagesManager) -> None:
   14. Diff Two Revisions
   15. Restore Revision
 
-  --- Assets ---
-  16. Upload Asset
-  17. List Assets
-  18. Download Asset
-  19. Delete Asset
-  20. List Folders
-  21. Create Folder
-
   --- System ---
-  22. Test Connection
+  16. Test Connection
   0. Exit
 =========================================
 ```
@@ -371,15 +323,8 @@ def feature_name(pages: PagesManager) -> None:
   11. Export Page to File
   12. Import Page from File
 
-  --- Assets ---
-  13. Upload Asset
-  14. List Assets
-  15. Download Asset
-  16. Delete Asset
-  17. Manage Asset Folders
-
   --- System ---
-  18. Test Connection
+  13. Test Connection
   0.  Exit
 =========================================
 ```
@@ -404,10 +349,9 @@ if either is missing.
 gql[requests]>=4.0.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0
-requests>=2.28.0
 ```
 
-No new dependencies needed for planned features (difflib is stdlib, mimetypes is stdlib).
+No new dependencies needed for planned features (difflib is stdlib).
 
 ---
 
@@ -415,10 +359,9 @@ No new dependencies needed for planned features (difflib is stdlib, mimetypes is
 
 ```
 Phase 1:  Fix bugs → Search → Pagination → Tree View
-Phase 2:  List Assets → Download Asset → Delete Asset → Folder Management
-Phase 3:  View History → View Revision → Diff → Restore
-Phase 4:  Move/Rename → Clone → Export → Import → Tag Filter
-Phase 5:  pyproject.toml → Update README → Connection Test
+Phase 2:  View History → View Revision → Diff → Restore
+Phase 3:  Move/Rename → Clone → Export → Import → Tag Filter
+Phase 4:  pyproject.toml → Update README → Connection Test
 ```
 
 Each phase should be completed and verified before moving to the next.
