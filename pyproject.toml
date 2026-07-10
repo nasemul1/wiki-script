@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-wiki-cli = "cli:main"
+wiki-cli = "wiki_cli:main"
 
 [tool.setuptools]
 packages = ["wiki_cli", "wiki_cli.pages"]

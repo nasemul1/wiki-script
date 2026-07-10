@@ -34,7 +34,13 @@ WIKIJS_API_KEY=your_api_key_here
 ### Interactive Menu
 
 ```bash
-python cli.py
+python -m wiki_cli
+```
+
+Or after installing:
+
+```bash
+wiki-cli
 ```
 
 ### As a Library
@@ -68,12 +74,6 @@ pages.restore_version(resp.page.id, history[0].versionId)
 pages.delete(resp.page.id)
 ```
 
-## Running Tests
-
-```bash
-# TBD
-```
-
 ## Features
 
 ### Pages
@@ -98,27 +98,23 @@ pages.delete(resp.page.id)
 
 ```
 wiki-script/
-├── wiki_cli/                      # Core library (importable)
-│   ├── __init__.py                # Public API
+├── wiki_cli/                      # Main package
+│   ├── __init__.py                # Public API & exports
 │   ├── client.py                  # WikiJSClient (gql transport)
 │   ├── exceptions.py              # WikiJSError
 │   ├── models.py                  # Page, PageResponse, PageHistory, PageVersion
+│   ├── utils.py                   # Shared CLI helpers
+│   ├── cli_main.py                # Menu loop & handler dispatch
+│   ├── cli_pages.py               # Page CRUD handlers
+│   ├── cli_history.py             # History/revision handlers
+│   ├── cli_system.py              # System handlers
 │   └── pages/
 │       ├── __init__.py            # Re-exports PagesManager
 │       ├── manager.py             # PagesManager class
 │       ├── queries.py             # GraphQL CRUD queries/mutations
 │       └── history.py             # GraphQL history queries/mutations
-├── cli.py                         # Interactive terminal menu
-├── tests/
-│   ├── conftest.py                # Shared fixtures
-│   ├── test_exceptions.py
-│   ├── test_models.py
-│   ├── test_client.py
-│   └── test_pages/
-│       └── test_manager.py
 ├── pyproject.toml
 ├── requirements.txt
-├── requirements-dev.txt
 ├── .env.example
 ├── README.md
 └── plan.md
