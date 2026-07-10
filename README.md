@@ -34,68 +34,19 @@ WIKIJS_API_KEY=your_api_key_here
 ### Interactive Menu
 
 ```bash
-python main.py
-```
-
-```
-=========================================
-       Wiki.js Manager
-=========================================
-  --- Pages ---
-  1. Create Page
-  2. Fetch Page
-  3. Update Page
-  4. Delete Page
-  5. List Pages
-  6. Search Pages
-  7. Browse Pages (tree)
-  8. Move/Rename Page
-  9. Clone Page
-  10. Export Page to File
-  11. Import Page from File
-
-  --- History ---
-  12. View Page History
-  13. View Specific Revision
-  14. Diff Two Revisions
-  15. Restore Revision
-
-  --- System ---
-  16. Test Connection
-  0. Exit
-=========================================
-```
-
-### Standalone Scripts
-
-Each operation is a standalone script. Run with `--help` for options.
-
-```bash
-# Create a page
-python scripts/create_page.py "projects/alpha/overview" "Project Alpha" "# Hello World" \
-    --description "Overview page" --tags "project,alpha"
-
-# Fetch a page
-python scripts/fetch_page.py --id 15
-python scripts/fetch_page.py --path projects/alpha/overview
-
-# Update a page
-python scripts/update_page.py --id 15 --title "New Title" --published --no-private
-
-# Delete a page
-python scripts/delete_page.py 15
+python cli.py
 ```
 
 ### As a Library
 
 ```python
-from wiki_script import WikiJSClient, Page, PagesManager
+from wiki_cli import WikiJSClient, Page, PagesManager
 
 client = WikiJSClient()
 pages = PagesManager(client)
 
 # Create
-page = Page(path="docs/intro", title="Intro", content="# Hi", description="Intro page")
+page = Page(path="docs/intro", title="Intro", content="# Hi")
 resp = pages.create(page)
 
 # Fetch
@@ -108,21 +59,19 @@ results = pages.search("intro")
 fetched.content += "\n\nUpdated."
 pages.update(fetched)
 
-# Move/Rename
-pages.move_or_rename(resp.page.id, "docs/introduction")
-
-# Clone
-clone_resp = pages.clone_page(resp.page.id, "docs/intro-copy", "Intro Copy")
-
 # History
 history, total = pages.get_history(resp.page.id)
 version = pages.get_version(resp.page.id, history[0].versionId)
 pages.restore_version(resp.page.id, history[0].versionId)
 
-# Export/Import (file I/O)
-
 # Delete
 pages.delete(resp.page.id)
+```
+
+## Running Tests
+
+```bash
+# TBD
 ```
 
 ## Features
@@ -149,23 +98,29 @@ pages.delete(resp.page.id)
 
 ```
 wiki-script/
-├── main.py                    # Interactive terminal menu
-├── scripts/                   # Standalone CLI scripts
-│   ├── create_page.py
-│   ├── fetch_page.py
-│   ├── update_page.py
-│   └── delete_page.py
-├── wiki_script/               # Core library
-│   ├── __init__.py
-│   ├── exceptions.py          # WikiJSError
-│   ├── models.py              # Page, PageHistory, PageVersion (Pydantic)
-│   ├── wiki_client.py         # WikiJSClient (gql transport)
-│   └── operations/
-│       ├── __init__.py
-│       └── pages.py           # PagesManager (GraphQL CRUD + history)
-├── requirements.txt
+├── wiki_cli/                      # Core library (importable)
+│   ├── __init__.py                # Public API
+│   ├── client.py                  # WikiJSClient (gql transport)
+│   ├── exceptions.py              # WikiJSError
+│   ├── models.py                  # Page, PageResponse, PageHistory, PageVersion
+│   └── pages/
+│       ├── __init__.py            # Re-exports PagesManager
+│       ├── manager.py             # PagesManager class
+│       ├── queries.py             # GraphQL CRUD queries/mutations
+│       └── history.py             # GraphQL history queries/mutations
+├── cli.py                         # Interactive terminal menu
+├── tests/
+│   ├── conftest.py                # Shared fixtures
+│   ├── test_exceptions.py
+│   ├── test_models.py
+│   ├── test_client.py
+│   └── test_pages/
+│       └── test_manager.py
 ├── pyproject.toml
+├── requirements.txt
+├── requirements-dev.txt
 ├── .env.example
+├── README.md
 └── plan.md
 ```
 

@@ -10,7 +10,7 @@ class Page(BaseModel):
     path: str
     title: str
     content: str = ""
-    description: str = ""
+    description: str | None = ""
     editor: str = "markdown"
     isPublished: bool = True
     isPrivate: bool = False

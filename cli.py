@@ -7,17 +7,14 @@ import difflib
 import os
 import sys
 
-from wiki_script.exceptions import WikiJSError
-from wiki_script.models import Page, PageHistory, PageVersion
-from wiki_script.operations.pages import PagesManager
-from wiki_script.wiki_client import WikiJSClient
+from wiki_cli import WikiJSClient, WikiJSError, Page, PageHistory, PagesManager
 
 PAGE_SIZE = 20
 
 MENU = """
-=========================================
+========================================
        Wiki.js Manager
-=========================================
+========================================
   --- Pages ---
   1. Create Page
   2. Fetch Page
@@ -40,7 +37,7 @@ MENU = """
   --- System ---
   16. Test Connection
   0. Exit
-=========================================
+========================================
 """
 
 
@@ -72,7 +69,8 @@ def print_history_table(entries: list[PageHistory], total: int) -> None:
         print(f"{h.versionId:<8} {date:<22} {h.authorName:<20} {h.actionType}")
 
 
-# --- Page Operations ---
+# ── Page Handlers ─────────────────────────────────────────────────────
+
 
 def create_page(pages: PagesManager) -> None:
     path = input("Page path (e.g. projects/alpha/overview): ").strip()
@@ -146,7 +144,9 @@ def update_page(pages: PagesManager) -> None:
     print(f"Current title: {existing.title}")
 
     title = input_with_default("New title (leave blank to keep)", existing.title)
-    description = input_with_default("New description (leave blank to keep)", existing.description)
+    description = input_with_default(
+        "New description (leave blank to keep)", existing.description
+    )
     print("Content options:  1 = Replace entirely, 2 = Append, 3 = Keep unchanged")
     content_choice = input("Choice [3]: ").strip() or "3"
 
@@ -161,7 +161,9 @@ def update_page(pages: PagesManager) -> None:
         "Tags (comma-separated, leave blank to keep)",
         ",".join(existing.tags),
     )
-    pub_raw = input_with_default("Published? (y/n)", "y" if existing.isPublished else "n")
+    pub_raw = input_with_default(
+        "Published? (y/n)", "y" if existing.isPublished else "n"
+    )
     is_published = pub_raw.lower() != "n"
 
     existing.title = title
@@ -179,7 +181,11 @@ def delete_page(pages: PagesManager) -> None:
     if not raw.isdigit():
         print("Invalid ID.")
         return
-    confirm = input(f"Are you sure you want to delete page {raw}? (yes/no): ").strip().lower()
+    confirm = (
+        input(f"Are you sure you want to delete page {raw}? (yes/no): ")
+        .strip()
+        .lower()
+    )
     if confirm != "yes":
         print("Cancelled.")
         return
@@ -200,7 +206,9 @@ def list_pages(pages: PagesManager) -> None:
 
     filter_tag = input_with_default("Filter by tag (leave blank for all)", "")
     if filter_tag:
-        result = [p for p in result if filter_tag.lower() in [t.lower() for t in p.tags]]
+        result = [
+            p for p in result if filter_tag.lower() in [t.lower() for t in p.tags]
+        ]
         if not result:
             print(f"\nNo pages found with tag '{filter_tag}'.")
             return
@@ -214,8 +222,10 @@ def list_pages(pages: PagesManager) -> None:
         remaining = total - offset - PAGE_SIZE
         if remaining <= 0:
             break
-        print(f"\n  Showing {offset + 1}-{offset + len(chunk)} of {total} "
-              f"({remaining} more)")
+        print(
+            f"\n  Showing {offset + 1}-{offset + len(chunk)} of {total} "
+            f"({remaining} more)"
+        )
         cmd = input("  [Enter] next page, [q] quit: ").strip().lower()
         if cmd == "q":
             break
@@ -239,7 +249,9 @@ def search_pages(pages: PagesManager) -> None:
 
     filter_tag = input_with_default("Filter by tag (leave blank for all)", "")
     if filter_tag:
-        result = [p for p in result if filter_tag.lower() in [t.lower() for t in p.tags]]
+        result = [
+            p for p in result if filter_tag.lower() in [t.lower() for t in p.tags]
+        ]
         if not result:
             print(f"\nNo pages found with tag '{filter_tag}'.")
             return
@@ -262,7 +274,7 @@ def browse_tree(pages: PagesManager) -> None:
             node = node.setdefault(part, {})
         node[parts[-1]] = p
 
-    def print_tree(d: dict, prefix: str = "", is_last: bool = True) -> None:
+    def _print_tree(d: dict, prefix: str = "", is_last: bool = True) -> None:
         items = sorted(d.items(), key=lambda x: (not isinstance(x[1], dict), x[0]))
         for i, (name, value) in enumerate(items):
             last = i == len(items) - 1
@@ -270,13 +282,13 @@ def browse_tree(pages: PagesManager) -> None:
             if isinstance(value, dict):
                 print(f"{prefix}{connector}{name}/")
                 extension = "    " if last else "│   "
-                print_tree(value, prefix + extension, last)
+                _print_tree(value, prefix + extension, last)
             else:
                 pub = "" if value.isPublished else " [draft]"
                 print(f"{prefix}{connector}{name} (id={value.id}){pub}")
 
     print("\n/ (root)")
-    print_tree(tree)
+    _print_tree(tree)
 
     print("\nEnter page ID to view (or press Enter to go back): ")
     choice = input("ID: ").strip()
@@ -312,9 +324,9 @@ def move_rename_page(pages: PagesManager) -> None:
         return
 
     print(f"\nThis will move/rename:")
-    print(f"  {existing.path}  →  {new_path}")
+    print(f"  {existing.path}  ->  {new_path}")
     if new_title != existing.title:
-        print(f"  Title: {existing.title}  →  {new_title}")
+        print(f"  Title: {existing.title}  ->  {new_title}")
     confirm = input("\nContinue? (yes/no): ").strip().lower()
     if confirm != "yes":
         print("Cancelled.")
@@ -322,7 +334,7 @@ def move_rename_page(pages: PagesManager) -> None:
 
     existing.path = new_path
     existing.title = new_title
-    response = pages.update(existing)
+    pages.update(existing)
     print(f"\nMoved page {page_id} to: {new_path}")
 
 
@@ -334,7 +346,7 @@ def clone_page(pages: PagesManager) -> None:
     source_id = int(raw)
 
     source = pages.get_by_id(source_id)
-    print(f"\nSource: {source.path} — {source.title}")
+    print(f"\nSource: {source.path} -- {source.title}")
 
     new_path = input("New path for clone: ").strip()
     if not new_path:
@@ -358,7 +370,7 @@ def export_page(pages: PagesManager) -> None:
     filename = input_with_default("Export filename", default_filename)
 
     with open(filename, "w", encoding="utf-8") as f:
-        f.write(f"---\n")
+        f.write("---\n")
         f.write(f"title: {page.title}\n")
         f.write(f"path: {page.path}\n")
         f.write(f"description: {page.description}\n")
@@ -367,7 +379,7 @@ def export_page(pages: PagesManager) -> None:
         f.write(f"private: {page.isPrivate}\n")
         f.write(f"locale: {page.locale}\n")
         f.write(f"editor: {page.editor}\n")
-        f.write(f"---\n\n")
+        f.write("---\n\n")
         f.write(page.content)
 
     print(f"\nExported page {page.id} to: {filename}")
@@ -395,7 +407,7 @@ def import_page(pages: PagesManager) -> None:
                 if ":" in line:
                     key, value = line.split(":", 1)
                     meta[key.strip()] = value.strip()
-            content = content[end + 3:].strip()
+            content = content[end + 3 :].strip()
 
     path = meta.get("path", "")
     if not path:
@@ -409,7 +421,11 @@ def import_page(pages: PagesManager) -> None:
 
     description = meta.get("description", "")
     tags_str = meta.get("tags", "")
-    tags = [t.strip() for t in tags_str.strip("[]").split(",") if t.strip()] if tags_str else []
+    tags = (
+        [t.strip() for t in tags_str.strip("[]").split(",") if t.strip()]
+        if tags_str
+        else []
+    )
 
     page = Page(
         path=path,
@@ -428,7 +444,8 @@ def import_page(pages: PagesManager) -> None:
     print(f"\nImported page (id={page_id}): {path}")
 
 
-# --- History Operations ---
+# ── History Handlers ──────────────────────────────────────────────────
+
 
 def view_page_history(pages: PagesManager) -> None:
     raw = input("Page ID: ").strip()
@@ -442,7 +459,9 @@ def view_page_history(pages: PagesManager) -> None:
 
     offset_page = 0
     while True:
-        entries, total = pages.get_history(page_id, offset_page=offset_page, offset_size=PAGE_SIZE)
+        entries, total = pages.get_history(
+            page_id, offset_page=offset_page, offset_size=PAGE_SIZE
+        )
         if not entries:
             if offset_page == 0:
                 print("\nNo history entries found.")
@@ -452,8 +471,10 @@ def view_page_history(pages: PagesManager) -> None:
         remaining = total - (offset_page + 1) * PAGE_SIZE
         if remaining <= 0:
             break
-        print(f"\n  Showing {offset_page * PAGE_SIZE + 1}-{offset_page * PAGE_SIZE + len(entries)} of {total} "
-              f"({remaining} more)")
+        print(
+            f"\n  Showing {offset_page * PAGE_SIZE + 1}-{offset_page * PAGE_SIZE + len(entries)} of {total} "
+            f"({remaining} more)"
+        )
         cmd = input("  [Enter] next page, [q] quit: ").strip().lower()
         if cmd == "q":
             break
@@ -474,7 +495,7 @@ def view_specific_revision(pages: PagesManager) -> None:
 
     version = pages.get_version(int(raw_page), int(raw_ver))
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Version:   {version.versionId}")
     print(f"Date:      {version.versionDate}")
     print(f"Author:    {version.authorName}")
@@ -483,7 +504,7 @@ def view_specific_revision(pages: PagesManager) -> None:
     print(f"Title:     {version.title}")
     print(f"Tags:      {version.tags}")
     print(f"Published: {version.isPublished}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(version.content)
 
 
@@ -511,7 +532,9 @@ def diff_two_revisions(pages: PagesManager) -> None:
     old_lines = v1.content.splitlines(keepends=True)
     new_lines = v2.content.splitlines(keepends=True)
 
-    diff = difflib.unified_diff(old_lines, new_lines, fromfile=old_label, tofile=new_label)
+    diff = difflib.unified_diff(
+        old_lines, new_lines, fromfile=old_label, tofile=new_label
+    )
 
     diff_output = "".join(diff)
     if not diff_output:
@@ -552,6 +575,9 @@ def restore_revision(pages: PagesManager) -> None:
     print(f"\nPage restored to version {version_id}.")
 
 
+# ── System ────────────────────────────────────────────────────────────
+
+
 def test_connection(client: WikiJSClient, pages: PagesManager) -> None:
     print("\nTesting connection...")
     print(f"URL: {client.url}")
@@ -559,9 +585,8 @@ def test_connection(client: WikiJSClient, pages: PagesManager) -> None:
     try:
         result = pages.list_all(order_by="CREATED")
         print(f"Pages accessible: {len(result)}")
-
         if result:
-            print(f"Most recently created: {result[0].path} — {result[0].title}")
+            print(f"Most recently created: {result[0].path} -- {result[0].title}")
     except WikiJSError as exc:
         print(f"Error: {exc}")
         return
@@ -569,7 +594,8 @@ def test_connection(client: WikiJSClient, pages: PagesManager) -> None:
     print("Connection OK.")
 
 
-# --- Main ---
+# ── Main ──────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     try:

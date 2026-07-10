@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
-from wiki_script.exceptions import WikiJSError
+from wiki_cli.exceptions import WikiJSError
 
 load_dotenv()
 
@@ -17,25 +17,12 @@ load_dotenv()
 class WikiJSClient:
     """Manages the gql client, authentication, and query execution for Wiki.js.
 
-    This class sets up a synchronous gql client with Bearer token authentication
-    and provides an execute method for running GraphQL operations against the
-    Wiki.js API.
-
     Attributes:
         url: The GraphQL endpoint URL.
         client: The underlying gql Client instance.
     """
 
     def __init__(self, url: str | None = None, api_key: str | None = None) -> None:
-        """Initialize the Wiki.js client.
-
-        Args:
-            url: GraphQL endpoint URL. Falls back to WIKIJS_URL env var.
-            api_key: Bearer token for authentication. Falls back to WIKIJS_API_KEY env var.
-
-        Raises:
-            WikiJSError: If required configuration is missing.
-        """
         self.url = url or os.getenv("WIKIJS_URL")
         self.api_key = api_key or os.getenv("WIKIJS_API_KEY")
 
@@ -65,12 +52,6 @@ class WikiJSClient:
         upload_files: bool = False,
     ) -> dict[str, Any]:
         """Execute a GraphQL operation against the Wiki.js API.
-
-        Args:
-            query: The GraphQL query or mutation string.
-            variable_values: Dictionary of variables to pass with the operation.
-            operation_name: Name of the operation when the document contains multiple.
-            upload_files: Set to True when the operation includes file uploads (FileVar).
 
         Returns:
             The 'data' dict from the GraphQL response.
