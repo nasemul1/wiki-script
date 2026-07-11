@@ -40,6 +40,8 @@ TOOL_LABELS = {
     "test_connection": "Testing connection",
 }
 
+MAX_CONTEXT_TOKENS = 50_000
+
 SYSTEM_PROMPT = """You are a Wiki.js assistant. You manage wiki pages using the tools provided.
 
 Rules:
@@ -88,6 +90,35 @@ class WikiAgent:
             {"role": "system", "content": SYSTEM_PROMPT},
         ]
 
+    def _estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
+        total = 0
+        for m in messages:
+            content = getattr(m, "content", None) or (m.get("content", "") if isinstance(m, dict) else "")
+            if content:
+                total += len(content) // 4
+            args = getattr(m, "arguments", None) or (m.get("arguments", "") if isinstance(m, dict) else "")
+            if args:
+                total += len(args) // 4
+        return total
+
+    def _trim_history(self) -> None:
+        if self._estimate_tokens(self.messages) <= MAX_CONTEXT_TOKENS:
+            return
+
+        system = self.messages[:1]
+        rest = self.messages[1:]
+
+        while rest and self._estimate_tokens(system + rest[2:]) > MAX_CONTEXT_TOKENS:
+            rest.pop(0)
+
+        if rest:
+            rest.insert(0, {
+                "role": "user",
+                "content": f"{D}[context trimmed — last {len(rest)} messages kept]{R}",
+            })
+
+        self.messages = system + rest
+
     def _run_openai(self, user_prompt: str) -> str:
         """Tool-calling loop for OpenAI-compatible APIs.
 
@@ -95,6 +126,8 @@ class WikiAgent:
         ollama, ollama-cloud) since they all use the same chat completions API.
         """
         self.messages.append({"role": "user", "content": user_prompt})
+
+        self._trim_history()
 
         while True:
             response = self.client.chat.completions.create(
@@ -110,7 +143,21 @@ class WikiAgent:
                 self.messages.append({"role": "assistant", "content": msg.content or ""})
                 return msg.content or ""
 
-            self.messages.append(msg)
+            self.messages.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in msg.tool_calls
+                ],
+            })
 
             for tool_call in msg.tool_calls:
                 result = self._execute_tool(
