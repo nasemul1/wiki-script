@@ -1,10 +1,12 @@
 # wiki-script
 
-Terminal-based Wiki.js manager. Manage pages and revisions entirely from the CLI.
+Terminal-based Wiki.js manager. Manage pages, revisions, and content entirely from the CLI — or use natural language with the AI assistant.
 
 ## Installation
 
 ```bash
+git clone https://github.com/Imranslab/wiki-script.git
+cd wiki-script
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -16,9 +18,15 @@ Or install as a package:
 pip install .
 ```
 
+For AI assistant support:
+
+```bash
+pip install -e ".[ai]"
+```
+
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in your credentials:
+Copy `.env.example` to `.env` and fill in your Wiki.js credentials:
 
 ```bash
 cp .env.example .env
@@ -43,62 +51,143 @@ Or after installing:
 wiki-cli
 ```
 
+You'll see the main menu:
+
+```
+========================================
+       Wiki.js Manager
+========================================
+  --- Pages ---
+  1. Create Page
+  2. Fetch Page
+  3. Update Page
+  4. Delete Page
+  5. List Pages
+  6. Search Pages
+  7. Browse Pages (tree)
+  8. Move/Rename Page
+  9. Clone Page
+  10. Export Page to File
+  11. Import Page from File
+
+  --- History ---
+  12. View Page History
+  13. View Specific Revision
+  14. Diff Two Revisions
+  15. Restore Revision
+
+  --- System ---
+  16. Test Connection
+
+  --- AI ---
+  17. AI Assistant
+  0. Exit
+========================================
+```
+
+Select an option by entering the number.
+
 ### AI Assistant
 
-```bash
-# Install with AI dependencies
-pip install -e ".[ai]"
+Start the AI assistant directly:
 
-# Start AI mode
+```bash
 wiki-ai
 ```
 
-You'll be prompted to select a provider and model:
+Or from the main menu, select option 17.
+
+On first run, you'll set up your AI provider:
 
 ```
-========================================
-   Select AI Provider & Model
-========================================
+  saved providers:
+    1    OpenRouter
+    2    Groq
+    3    add new
 
-   1. OpenRouter - Llama 4 Scout (Free)
-   2. OpenRouter - Gemini 2.0 Flash (Free)
-   ...
-  11. Custom (enter manually)
+  >
 
-Select model [1]:
+  available providers:
+
+    1    OpenAI
+    2    OpenRouter
+    3    Groq
+    4    Mistral
+    5    Ollama (Local)
+    6    Ollama Cloud (Remote)
+
+  >
 ```
 
-Then use natural language to manage your wiki:
+Supported providers:
+- **OpenRouter** — Access to hundreds of models (free tier available)
+- **Groq** — Fast inference (Llama, Mixtral)
+- **OpenAI** — GPT-4o, GPT-4, etc.
+- **Mistral** — Mistral models
+- **Ollama (Local)** — Run models locally
+- **Ollama Cloud (Remote)** — Remote Ollama instances
+
+API keys are saved to `~/.config/wiki-cli/credentials.json` (permissions `0600`). On subsequent runs, it skips provider selection and goes straight to chat.
+
+Once configured, use natural language:
 
 ```
-> Create a page at docs/getting-started with an introduction
-> Show me all pages tagged "api"
-> Update page 5's title to "New Title"
+  provider:  OpenRouter
+  model:     meta-llama/llama-4-scout:free
+
+  > list all pages
+  > create a page at docs/getting-started with title "Getting Started"
+  > search for pages about "api"
+  > update page 5 title to "New Title"
+  > show the history of page 3
+  > delete page 12
+  > what's the diff between revision 1 and 2 of page 7
 ```
 
-See [AI_INTEGRATION.md](AI_INTEGRATION.md) for full documentation.
+#### AI Commands
+
+| Command | Description |
+|---------|-------------|
+| `/providers` | Switch AI provider |
+| `/models` | Switch model |
+| `/remove-key` | Remove saved API key |
+| `/help` | Show available commands |
+| `exit` | Quit |
 
 ### As a Library
 
 ```python
-from wiki_cli import WikiJSClient, Page, PagesManager
+from wiki_cli import WikiJSClient, PagesManager, Page
 
 client = WikiJSClient()
 pages = PagesManager(client)
 
-# Create
-page = Page(path="docs/intro", title="Intro", content="# Hi")
+# Create a page
+page = Page(path="docs/intro", title="Introduction", content="# Hello")
 resp = pages.create(page)
+print(f"Created page {resp.page.id}")
 
-# Fetch
+# Fetch by ID
 fetched = pages.get_by_id(resp.page.id)
+
+# Fetch by path
+fetched = pages.get_by_path("docs/intro")
+
+# Update
+fetched.content += "\n\nMore content here."
+pages.update(fetched)
 
 # Search
 results = pages.search("intro")
 
-# Update
-fetched.content += "\n\nUpdated."
-pages.update(fetched)
+# List all pages
+all_pages = pages.list_all()
+
+# Move/Rename
+pages.move_or_rename(resp.page.id, "docs/new-intro")
+
+# Clone
+clone = pages.clone_page(resp.page.id, "docs/clone", "Cloned Page")
 
 # History
 history, total = pages.get_history(resp.page.id)
@@ -107,27 +196,59 @@ pages.restore_version(resp.page.id, history[0].versionId)
 
 # Delete
 pages.delete(resp.page.id)
+
+# Export to file
+pages.export_to_file(resp.page.id, "export.md")
+
+# Import from file
+pages.import_from_file("import.md", "docs/imported")
+
+# Connection test
+pages.test_connection()
 ```
 
 ## Features
 
 ### Pages
-- **CRUD**: Create, read, update, delete pages
-- **Search**: Full-text search across pages
-- **Browse**: Tree view of page hierarchy
-- **Move/Rename**: Change page path or title
-- **Clone**: Duplicate a page to a new path
-- **Export**: Save page as Markdown with YAML frontmatter
-- **Import**: Create page from Markdown file
+
+| Feature | Description |
+|---------|-------------|
+| **Create** | Create a new page with path, title, and content |
+| **Fetch** | View a page by ID or path |
+| **Update** | Edit page title, content, description, path, or tags |
+| **Delete** | Remove a page permanently |
+| **List** | View all pages sorted by title, ID, or creation date |
+| **Search** | Full-text search across page titles and content |
+| **Browse** | Hierarchical tree view of all pages |
+| **Move/Rename** | Change a page's path or title |
+| **Clone** | Duplicate a page to a new path |
+| **Export** | Save a page as Markdown with YAML frontmatter |
+| **Import** | Create a page from a Markdown file |
 
 ### History
-- **View History**: Browse revision history with pagination
-- **View Revision**: Inspect any past version
-- **Diff**: Compare two revisions side by side
-- **Restore**: Rollback to any previous version
+
+| Feature | Description |
+|---------|-------------|
+| **View History** | Browse revision history with pagination |
+| **View Revision** | Inspect any past version of a page |
+| **Diff** | Compare two revisions side by side |
+| **Restore** | Rollback to any previous version |
 
 ### System
-- **Connection Test**: Verify API connectivity
+
+| Feature | Description |
+|---------|-------------|
+| **Test Connection** | Verify Wiki.js API connectivity and credentials |
+
+### AI Assistant
+
+| Feature | Description |
+|---------|-------------|
+| **Natural language** | Manage pages using plain English prompts |
+| **Multi-provider** | Switch between OpenRouter, Groq, OpenAI, Mistral, Ollama |
+| **Live model list** | Models fetched from provider API, not hardcoded |
+| **Persistent config** | API keys and last-used provider/model saved locally |
+| **16 tools** | AI can perform all page operations, history, search, and more |
 
 ## Project Structure
 
@@ -135,7 +256,7 @@ pages.delete(resp.page.id)
 wiki-script/
 ├── wiki_cli/                      # Main package
 │   ├── __init__.py                # Public API & exports
-│   ├── client.py                  # WikiJSClient (gql transport)
+│   ├── client.py                  # WikiJSClient (GraphQL transport)
 │   ├── exceptions.py              # WikiJSError
 │   ├── models.py                  # Page, PageResponse, PageHistory, PageVersion
 │   ├── utils.py                   # Shared CLI helpers
@@ -143,12 +264,18 @@ wiki-script/
 │   ├── cli_pages.py               # Page CRUD handlers
 │   ├── cli_history.py             # History/revision handlers
 │   ├── cli_system.py              # System handlers
-│   └── pages/
-│       ├── __init__.py            # Re-exports PagesManager
-│       ├── manager.py             # PagesManager class
-│       ├── queries.py             # GraphQL CRUD queries/mutations
-│       └── history.py             # GraphQL history queries/mutations
-├── tests/                         # E2E tests (67 tests)
+│   ├── pages/
+│   │   ├── __init__.py            # Re-exports PagesManager
+│   │   ├── manager.py             # PagesManager class
+│   │   ├── queries.py             # GraphQL CRUD queries/mutations
+│   │   └── history.py             # GraphQL history queries/mutations
+│   └── ai/
+│       ├── __init__.py            # AI package exports
+│       ├── config.py              # Provider config, API key storage
+│       ├── tools.py               # Tool schemas for LLM function calling
+│       ├── agent.py               # WikiAgent (tool dispatch, LLM loop)
+│       └── cli.py                 # AI assistant terminal UI
+├── tests/                         # 67 tests
 │   ├── conftest.py                # Shared fixtures
 │   ├── test_create_page.py        # Create Page (6 tests)
 │   ├── create_page/               # success.py, validation.py, defaults.py
@@ -187,6 +314,7 @@ wiki-script/
 ├── pyproject.toml
 ├── requirements.txt
 ├── .env.example
+├── AI_INTEGRATION.md              # AI assistant documentation
 ├── README.md
 ├── TEST_PLAN.md
 └── plan.md
@@ -194,10 +322,19 @@ wiki-script/
 
 ## Dependencies
 
+**Core:**
 - Python 3.10+
-- gql[requests] — GraphQL client
-- pydantic — Data validation
-- python-dotenv — Environment variables
+- `gql[requests]` — GraphQL client
+- `pydantic` — Data validation
+- `python-dotenv` — Environment variables
+
+**AI (optional):**
+- `openai` — OpenAI-compatible API client (works with all providers)
+- `httpx` — HTTP client for model listing
+
+**Dev:**
+- `pytest` — Test framework
+- `pytest-cov` — Coverage reporting
 
 ## Testing
 

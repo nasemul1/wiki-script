@@ -11,6 +11,35 @@ from wiki_cli.pages import PagesManager
 from wiki_cli.ai.config import AIConfig
 from wiki_cli.ai.tools import TOOLS
 
+# ── ANSI ─────────────────────────────────────────────────────────────
+
+R = "\033[0m"
+B = "\033[1m"
+D = "\033[2m"
+C = "\033[36m"
+G = "\033[32m"
+Y = "\033[33m"
+X = "\033[90m"
+
+TOOL_LABELS = {
+    "create_page":     "Creating page",
+    "fetch_page":      "Fetching page",
+    "update_page":     "Updating page",
+    "delete_page":     "Deleting page",
+    "list_pages":      "Listing pages",
+    "search_pages":    "Searching pages",
+    "browse_tree":     "Browsing tree",
+    "move_page":       "Moving page",
+    "clone_page":      "Cloning page",
+    "export_page":     "Exporting page",
+    "import_page":     "Importing page",
+    "view_history":    "Viewing history",
+    "view_revision":   "Viewing revision",
+    "diff_revisions":  "Diffing revisions",
+    "restore_revision": "Restoring revision",
+    "test_connection": "Testing connection",
+}
+
 SYSTEM_PROMPT = """You are a Wiki.js assistant. You manage wiki pages using the tools provided.
 
 Rules:
@@ -107,6 +136,8 @@ class WikiAgent:
         except json.JSONDecodeError as e:
             return {"success": False, "error": f"Invalid JSON arguments: {e}"}
 
+        self._log_tool(name, args)
+
         dispatch = {
             "create_page": self._tool_create_page,
             "fetch_page": self._tool_fetch_page,
@@ -132,13 +163,103 @@ class WikiAgent:
 
         try:
             result = handler(args)
+            self._log_result(name, result)
             if hasattr(result, "model_dump"):
                 return {"success": True, "data": result.model_dump()}
             return {"success": True, "data": result}
         except WikiJSError as e:
+            self._log_error(name, str(e))
             return {"success": False, "error": str(e)}
         except Exception as e:
+            self._log_error(name, str(e))
             return {"success": False, "error": f"Unexpected error: {e}"}
+
+    def _log_tool(self, name: str, args: dict) -> None:
+        label = TOOL_LABELS.get(name, name)
+        detail = self._summarize_args(name, args)
+        print(f"  {X}▸{R} {D}{label}{R}{detail}")
+
+    def _log_result(self, name: str, result: Any) -> None:
+        summary = self._summarize_result(name, result)
+        print(f"  {G}✓{R} {D}{summary}{R}")
+
+    def _log_error(self, name: str, error: str) -> None:
+        print(f"  {Y}✗{R} {D}{error}{R}")
+
+    def _summarize_args(self, name: str, args: dict) -> str:
+        if name == "create_page":
+            return f"  {C}{args.get('path', '')}{R}"
+        if name == "fetch_page":
+            key = args.get("page_id") or args.get("path", "")
+            return f"  {C}{key}{R}"
+        if name == "update_page":
+            return f"  {C}id={args.get('page_id', '')}{R}"
+        if name == "delete_page":
+            return f"  {C}id={args.get('page_id', '')}{R}"
+        if name == "search_pages":
+            return f"  {C}\"{args.get('query', '')}\"{R}"
+        if name == "move_page":
+            return f"  {C}id={args.get('page_id', '')} → {args.get('new_path', '')}{R}"
+        if name == "clone_page":
+            return f"  {C}id={args.get('source_id', '')} → {args.get('new_path', '')}{R}"
+        if name == "export_page":
+            return f"  {C}id={args.get('page_id', '')} → {args.get('filename', '')}{R}"
+        if name == "import_page":
+            return f"  {C}{args.get('filename', '')}{R}"
+        if name == "view_history":
+            return f"  {C}page_id={args.get('page_id', '')}{R}"
+        if name == "view_revision":
+            return f"  {C}page={args.get('page_id', '')} v={args.get('version_id', '')}{R}"
+        if name == "diff_revisions":
+            return f"  {C}page={args.get('page_id', '')} v{args.get('version_id_1', '')}→v{args.get('version_id_2', '')}{R}"
+        if name == "restore_revision":
+            return f"  {C}page={args.get('page_id', '')} → v{args.get('version_id', '')}{R}"
+        return ""
+
+    def _summarize_result(self, name: str, result: Any) -> str:
+        if name == "create_page":
+            pid = getattr(result, "page", None)
+            pid = pid.id if pid else "?"
+            return f"page created (id={pid})"
+        if name == "fetch_page":
+            return f"fetched \"{getattr(result, 'title', '?')}\" (id={getattr(result, 'id', '?')})"
+        if name == "update_page":
+            return "page updated"
+        if name == "delete_page":
+            return "page deleted"
+        if name == "list_pages":
+            total = result.get("total", "?") if isinstance(result, dict) else "?"
+            return f"{total} pages found"
+        if name == "search_pages":
+            total = result.get("total", "?") if isinstance(result, dict) else "?"
+            return f"{total} results"
+        if name == "browse_tree":
+            return "tree built"
+        if name == "move_page":
+            return "page moved"
+        if name == "clone_page":
+            return "page cloned"
+        if name == "export_page":
+            msg = result.get("message", "exported") if isinstance(result, dict) else "exported"
+            return msg
+        if name == "import_page":
+            pid = getattr(result, "page", None)
+            pid = pid.id if pid else "?"
+            return f"page imported (id={pid})"
+        if name == "view_history":
+            total = result.get("total", "?") if isinstance(result, dict) else "?"
+            return f"{total} revisions"
+        if name == "view_revision":
+            return f"version {getattr(result, 'versionId', '?')}"
+        if name == "diff_revisions":
+            return "diff computed"
+        if name == "restore_revision":
+            return "version restored"
+        if name == "test_connection":
+            if isinstance(result, dict) and result.get("status") == "connected":
+                return f"connected ({result.get('total_pages', '?')} pages)"
+            return "connection failed"
+        return "done"
 
     # ── Tool Handlers ─────────────────────────────────────────────────
 

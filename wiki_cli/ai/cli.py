@@ -7,7 +7,10 @@ During chat: /providers, /models, /remove-key, /help
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from wiki_cli import WikiJSError
@@ -206,6 +209,32 @@ def _build_config_from_saved(provider: str, model: str) -> AIConfig:
     return AIConfig(provider=provider, api_key=api_key, model=model, base_url=defaults.get("base_url", ""))
 
 
+# ── Editor ──────────────────────────────────────────────────────────
+
+def _open_editor(initial: str = "") -> str | None:
+    """Open $EDITOR for multi-line input. Returns content or None on cancel."""
+    editor = os.environ.get("EDITOR", "")
+    if not editor:
+        for e in ("vi", "nano", "vim", "gedit"):
+            if subprocess.run(["which", e], capture_output=True).returncode == 0:
+                editor = e
+                break
+    if not editor:
+        print(f"  {Y}no editor found. set $EDITOR or install vi/nano{R}")
+        return None
+
+    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False) as f:
+        f.write(initial)
+        tmp = f.name
+
+    try:
+        subprocess.run([editor, tmp])
+        content = Path(tmp).read_text().strip()
+        return content if content else None
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
 # ── Slash commands ──────────────────────────────────────────────────
 
 def _cmd_providers(agent: WikiAgent) -> None:
@@ -254,6 +283,7 @@ def _cmd_remove_key(agent: WikiAgent) -> None:
 def _cmd_help() -> None:
     print(f"""
   {B}commands:{R}
+    {C}/edit{R}           open editor for multi-line input
     {C}/providers{R}      switch provider
     {C}/models{R}         switch model
     {C}/remove-key{R}     remove saved api key
@@ -303,6 +333,12 @@ def ai_mode() -> None:
         if prompt == "/help":
             _cmd_help()
             continue
+        if prompt == "/edit":
+            content = _open_editor()
+            if content:
+                prompt = content
+            else:
+                continue
         if prompt == "/providers":
             _cmd_providers(agent)
             continue
