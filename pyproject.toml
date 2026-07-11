@@ -17,15 +17,20 @@ dependencies = [
 
 [project.scripts]
 wiki-cli = "wiki_cli:main"
+wiki-ai = "wiki_cli.ai.cli:ai_mode"
 
 [project.optional-dependencies]
+ai = [
+    "openai>=1.0.0",
+    "httpx>=0.25.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
 ]
 
 [tool.setuptools]
-packages = ["wiki_cli", "wiki_cli.pages"]
+packages = ["wiki_cli", "wiki_cli.pages", "wiki_cli.ai"]
 
 [tool.pytest.ini_options]
 pythonpath = ["tests"]

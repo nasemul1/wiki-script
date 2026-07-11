@@ -54,14 +54,14 @@ class PagesManager:
 
         variables = {
             "id": page.id,
-            "content": page.content,
+            "content": page.content or "",
             "description": page.description or "",
-            "editor": page.editor,
+            "editor": page.editor or "markdown",
             "isPrivate": page.isPrivate,
             "isPublished": page.isPublished,
-            "tags": page.tags,
-            "title": page.title,
-            "path": page.path,
+            "tags": page.tags or [],
+            "title": page.title or "",
+            "path": page.path or "",
         }
         result = self.client.execute(UPDATE_PAGE, variable_values=variables)
         return self._parse_response(result, "update")

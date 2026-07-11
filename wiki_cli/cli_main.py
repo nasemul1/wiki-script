@@ -53,9 +53,19 @@ MENU = """
 
   --- System ---
   16. Test Connection
+
+  --- AI ---
+  17. AI Assistant
   0. Exit
 ========================================
 """
+
+
+def _ai_assistant() -> None:
+    """Launch the AI assistant (lazy import to avoid requiring openai when unused)."""
+    from wiki_cli.ai.cli import ai_mode
+
+    ai_mode()
 
 
 def main() -> None:
@@ -83,6 +93,7 @@ def main() -> None:
         "14": ("Diff Two Revisions", lambda: diff_two_revisions(pages)),
         "15": ("Restore Revision", lambda: restore_revision(pages)),
         "16": ("Test Connection", lambda: test_connection(client, pages)),
+        "17": ("AI Assistant", _ai_assistant),
     }
 
     while True:

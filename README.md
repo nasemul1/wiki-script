@@ -43,6 +43,41 @@ Or after installing:
 wiki-cli
 ```
 
+### AI Assistant
+
+```bash
+# Install with AI dependencies
+pip install -e ".[ai]"
+
+# Start AI mode
+wiki-ai
+```
+
+You'll be prompted to select a provider and model:
+
+```
+========================================
+   Select AI Provider & Model
+========================================
+
+   1. OpenRouter - Llama 4 Scout (Free)
+   2. OpenRouter - Gemini 2.0 Flash (Free)
+   ...
+  11. Custom (enter manually)
+
+Select model [1]:
+```
+
+Then use natural language to manage your wiki:
+
+```
+> Create a page at docs/getting-started with an introduction
+> Show me all pages tagged "api"
+> Update page 5's title to "New Title"
+```
+
+See [AI_INTEGRATION.md](AI_INTEGRATION.md) for full documentation.
+
 ### As a Library
 
 ```python
