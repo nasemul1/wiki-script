@@ -113,10 +113,15 @@ wiki-script/
 │       ├── manager.py             # PagesManager class
 │       ├── queries.py             # GraphQL CRUD queries/mutations
 │       └── history.py             # GraphQL history queries/mutations
+├── tests/                         # E2E tests
+│   ├── conftest.py                # Shared fixtures
+│   ├── test_create_page.py        # Feature 1: Create Page
+│   └── ...
 ├── pyproject.toml
 ├── requirements.txt
 ├── .env.example
 ├── README.md
+├── TEST_PLAN.md
 └── plan.md
 ```
 
@@ -126,3 +131,29 @@ wiki-script/
 - gql[requests] — GraphQL client
 - pydantic — Data validation
 - python-dotenv — Environment variables
+
+## Testing
+
+Install dev dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Run all tests:
+
+```bash
+pytest tests/ -v
+```
+
+Run a specific feature:
+
+```bash
+pytest tests/test_create_page.py -v
+```
+
+Run with coverage:
+
+```bash
+pytest tests/ -v --cov=wiki_cli --cov-report=term-missing
+```

@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+tests/test_create_page.py
 wiki_cli/__init__.py
 wiki_cli/__main__.py
 wiki_cli/cli_history.py
