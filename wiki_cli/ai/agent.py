@@ -65,14 +65,14 @@ class WikiAgent:
         self.wiki_client = WikiJSClient()
         self.pages = PagesManager(self.wiki_client)
         self.client = self.config.get_client()
+        self.messages: list[dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+        ]
 
     def run(self, user_prompt: str) -> str:
         """Process a user prompt and return the AI's response.
 
-        This is the main entry point. It handles the full loop:
-        1. Send prompt to LLM
-        2. If LLM wants to call tools, execute them and send results back
-        3. Repeat until LLM produces a text response
+        Maintains conversation history across calls so the LLM retains context.
 
         Args:
             user_prompt: The user's natural language request.
@@ -82,21 +82,24 @@ class WikiAgent:
         """
         return self._run_openai(user_prompt)
 
+    def clear_history(self) -> None:
+        """Reset conversation history, keeping only the system prompt."""
+        self.messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+        ]
+
     def _run_openai(self, user_prompt: str) -> str:
         """Tool-calling loop for OpenAI-compatible APIs.
 
         Works with all supported providers (openai, openrouter, groq, mistral,
         ollama, ollama-cloud) since they all use the same chat completions API.
         """
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ]
+        self.messages.append({"role": "user", "content": user_prompt})
 
         while True:
             response = self.client.chat.completions.create(
                 model=self.config.model,
-                messages=messages,
+                messages=self.messages,
                 tools=TOOLS,
                 tool_choice="auto",
             )
@@ -104,16 +107,17 @@ class WikiAgent:
             msg = response.choices[0].message
 
             if not msg.tool_calls:
+                self.messages.append({"role": "assistant", "content": msg.content or ""})
                 return msg.content or ""
 
-            messages.append(msg)
+            self.messages.append(msg)
 
             for tool_call in msg.tool_calls:
                 result = self._execute_tool(
                     tool_call.function.name,
                     tool_call.function.arguments,
                 )
-                messages.append(
+                self.messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
@@ -342,7 +346,15 @@ class WikiAgent:
             parts = p.path.split("/")
             node = tree
             for part in parts[:-1]:
-                node = node.setdefault(part, {})
+                child = node.get(part)
+                if child is None:
+                    node[part] = {}
+                    node = node[part]
+                elif isinstance(child, dict):
+                    node = child
+                else:
+                    node[part] = {}
+                    node = node[part]
             node[parts[-1]] = p
 
         lines: list[str] = []

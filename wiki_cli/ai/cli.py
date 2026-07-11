@@ -284,6 +284,7 @@ def _cmd_help() -> None:
     print(f"""
   {B}commands:{R}
     {C}/edit{R}           open editor for multi-line input
+    {C}/clear{R}          clear conversation history
     {C}/providers{R}      switch provider
     {C}/models{R}         switch model
     {C}/remove-key{R}     remove saved api key
@@ -332,6 +333,10 @@ def ai_mode() -> None:
 
         if prompt == "/help":
             _cmd_help()
+            continue
+        if prompt == "/clear":
+            agent.clear_history()
+            print(f"  {G}history cleared{R}\n")
             continue
         if prompt == "/edit":
             content = _open_editor()

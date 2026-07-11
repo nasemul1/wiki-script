@@ -208,7 +208,15 @@ def browse_tree(pages: PagesManager) -> None:
         parts = p.path.split("/")
         node = tree
         for part in parts[:-1]:
-            node = node.setdefault(part, {})
+            child = node.get(part)
+            if child is None:
+                node[part] = {}
+                node = node[part]
+            elif isinstance(child, dict):
+                node = child
+            else:
+                node[part] = {}
+                node = node[part]
         node[parts[-1]] = p
 
     def _print_tree(d: dict, prefix: str = "", is_last: bool = True) -> None:
