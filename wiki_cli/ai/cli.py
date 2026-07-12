@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -213,14 +214,15 @@ def _build_config_from_saved(provider: str, model: str) -> AIConfig:
 
 def _open_editor(initial: str = "") -> str | None:
     """Open $EDITOR for multi-line input. Returns content or None on cancel."""
-    editor = os.environ.get("EDITOR", "")
+    editor = os.environ.get("EDITOR", "") or os.environ.get("VISUAL", "")
     if not editor:
-        for e in ("vi", "nano", "vim", "gedit"):
-            if subprocess.run(["which", e], capture_output=True).returncode == 0:
+        candidates = ["vi", "vim", "nano", "gedit", "notepad", "notepad++", "code"]
+        for e in candidates:
+            if shutil.which(e):
                 editor = e
                 break
     if not editor:
-        print(f"  {Y}no editor found. set $EDITOR or install vi/nano{R}")
+        print(f"  {Y}no editor found. set $EDITOR or install vim/notepad{R}")
         return None
 
     with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False) as f:
