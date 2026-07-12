@@ -30,6 +30,7 @@ TOOL_LABELS = {
     "search_pages":    "Searching pages",
     "browse_tree":     "Browsing tree",
     "move_page":       "Moving page",
+    "move_pages":      "Moving pages",
     "clone_page":      "Cloning page",
     "export_page":     "Exporting page",
     "import_page":     "Importing page",
@@ -198,6 +199,7 @@ class WikiAgent:
             "search_pages": self._tool_search_pages,
             "browse_tree": self._tool_browse_tree,
             "move_page": self._tool_move_page,
+            "move_pages": self._tool_move_pages,
             "clone_page": self._tool_clone_page,
             "export_page": self._tool_export_page,
             "import_page": self._tool_import_page,
@@ -251,6 +253,9 @@ class WikiAgent:
             return f"  {C}\"{args.get('query', '')}\"{R}"
         if name == "move_page":
             return f"  {C}id={args.get('page_id', '')} → {args.get('new_path', '')}{R}"
+        if name == "move_pages":
+            moves = args.get("moves", [])
+            return f"  {C}{len(moves)} pages{R}"
         if name == "clone_page":
             return f"  {C}id={args.get('source_id', '')} → {args.get('new_path', '')}{R}"
         if name == "export_page":
@@ -288,6 +293,10 @@ class WikiAgent:
             return "tree built"
         if name == "move_page":
             return "page moved"
+        if name == "move_pages":
+            if isinstance(result, dict):
+                return f"{result.get('succeeded', 0)}/{result.get('total', 0)} pages moved"
+            return "pages moved"
         if name == "clone_page":
             return "page cloned"
         if name == "export_page":
@@ -424,6 +433,21 @@ class WikiAgent:
 
     def _tool_move_page(self, args: dict) -> Any:
         return self.pages.move_or_rename(args["page_id"], args["new_path"])
+
+    def _tool_move_pages(self, args: dict) -> Any:
+        moves = args.get("moves", [])
+        results = []
+        for move in moves:
+            page_id = move["page_id"]
+            new_path = move["new_path"]
+            try:
+                self.pages.move_or_rename(page_id, new_path)
+                results.append({"page_id": page_id, "new_path": new_path, "success": True})
+            except WikiJSError as e:
+                results.append({"page_id": page_id, "new_path": new_path, "success": False, "error": str(e)})
+        succeeded = sum(1 for r in results if r["success"])
+        failed = len(results) - succeeded
+        return {"total": len(results), "succeeded": succeeded, "failed": failed, "results": results}
 
     def _tool_clone_page(self, args: dict) -> Any:
         return self.pages.clone_page(

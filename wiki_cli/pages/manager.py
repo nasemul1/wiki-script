@@ -59,6 +59,7 @@ class PagesManager:
             "editor": page.editor or "markdown",
             "isPrivate": page.isPrivate,
             "isPublished": page.isPublished,
+            "locale": page.locale or "en",
             "tags": page.tags or [],
             "title": page.title or "",
             "path": page.path or "",

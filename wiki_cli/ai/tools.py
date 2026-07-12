@@ -195,6 +195,37 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "move_pages",
+            "description": "Move multiple pages at once. Each move specifies a page ID and new path.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "moves": {
+                        "type": "array",
+                        "description": "List of moves to perform",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "page_id": {
+                                    "type": "integer",
+                                    "description": "Page ID to move",
+                                },
+                                "new_path": {
+                                    "type": "string",
+                                    "description": "New path for the page",
+                                },
+                            },
+                            "required": ["page_id", "new_path"],
+                        },
+                    },
+                },
+                "required": ["moves"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "clone_page",
             "description": "Clone an existing page to a new path with a new title.",
             "parameters": {

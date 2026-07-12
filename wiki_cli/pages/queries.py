@@ -47,6 +47,7 @@ mutation UpdatePage(
   $editor: String!
   $isPrivate: Boolean!
   $isPublished: Boolean!
+  $locale: String!
   $tags: [String!]!
   $title: String!
   $path: String!
@@ -59,6 +60,7 @@ mutation UpdatePage(
       editor: $editor
       isPrivate: $isPrivate
       isPublished: $isPublished
+      locale: $locale
       tags: $tags
       title: $title
       path: $path
