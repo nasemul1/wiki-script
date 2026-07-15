@@ -12,6 +12,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 from wiki_cli import WikiJSError
@@ -212,6 +214,29 @@ def _build_config_from_saved(provider: str, model: str) -> AIConfig:
 
 # ── Editor ──────────────────────────────────────────────────────────
 
+class _Spinner:
+    def __init__(self):
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        i = 0
+        while not self._stop.is_set():
+            sys.stdout.write(f"\r  {C}{frames[i % len(frames)]}{R} thinking... ")
+            sys.stdout.flush()
+            self._stop.wait(0.08)
+            i += 1
+        sys.stdout.write(f"\r{' ' * 30}\r")
+        sys.stdout.flush()
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        self._thread.join()
+
 def _open_editor(initial: str = "") -> str | None:
     """Open $EDITOR for multi-line input. Returns content or None on cancel."""
     editor = os.environ.get("EDITOR", "") or os.environ.get("VISUAL", "")
@@ -359,7 +384,14 @@ def ai_mode() -> None:
             break
 
         try:
-            response = agent.run(prompt)
+            agent.quiet = True
+            spinner = _Spinner()
+            spinner.start()
+            try:
+                response = agent.run(prompt)
+            finally:
+                spinner.stop()
+                agent.quiet = False
             print(f"\n{response}\n")
         except Exception as exc:
             print(f"  {Y}error: {exc}{R}\n")

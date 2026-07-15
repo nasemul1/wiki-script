@@ -71,6 +71,7 @@ class WikiAgent:
         self.messages: list[dict[str, Any]] = [
             {"role": "system", "content": SYSTEM_PROMPT},
         ]
+        self.quiet = False
 
     def run(self, user_prompt: str) -> str:
         """Process a user prompt and return the AI's response.
@@ -228,15 +229,21 @@ class WikiAgent:
             return {"success": False, "error": f"Unexpected error: {e}"}
 
     def _log_tool(self, name: str, args: dict) -> None:
+        if self.quiet:
+            return
         label = TOOL_LABELS.get(name, name)
         detail = self._summarize_args(name, args)
         print(f"  {X}▸{R} {D}{label}{R}{detail}")
 
     def _log_result(self, name: str, result: Any) -> None:
+        if self.quiet:
+            return
         summary = self._summarize_result(name, result)
         print(f"  {G}✓{R} {D}{summary}{R}")
 
     def _log_error(self, name: str, error: str) -> None:
+        if self.quiet:
+            return
         print(f"  {Y}✗{R} {D}{error}{R}")
 
     def _summarize_args(self, name: str, args: dict) -> str:
