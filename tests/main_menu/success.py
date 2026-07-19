@@ -20,7 +20,7 @@ def test_menu_exit(capsys):
 
 
 def test_menu_invalid_option(capsys):
-    inputs = iter(["99", "0"])
+    inputs = iter(["99", "", "0"])
 
     with patch(INPUT_PATCH, side_effect=inputs):
         with patch("wiki_cli.cli_main.WikiJSClient"):
@@ -33,7 +33,7 @@ def test_menu_invalid_option(capsys):
 
 
 def test_menu_dispatches_handler(capsys):
-    inputs = iter(["1", "", "", "0"])
+    inputs = iter(["1", "", "", "", "0"])
 
     with patch(INPUT_PATCH, side_effect=inputs):
         with patch("wiki_cli.cli_main.WikiJSClient"):
@@ -46,7 +46,7 @@ def test_menu_dispatches_handler(capsys):
 
 
 def test_menu_handles_error(capsys):
-    inputs = iter(["16", "", "0"])
+    inputs = iter(["24", "", "0"])
 
     with patch(INPUT_PATCH, side_effect=inputs):
         with patch("wiki_cli.cli_main.WikiJSClient") as mock_client:
