@@ -123,7 +123,7 @@ def main() -> None:
     }
 
     jira_handlers = {
-        "16": "test_jira_connection",
+        "16": "check_jira_connection",
         "17": "list_jira_projects",
         "18": "get_jira_project",
         "19": "search_jira_issues",

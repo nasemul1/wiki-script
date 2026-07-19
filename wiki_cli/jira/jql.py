@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from wiki_cli.jira.errors import JiraValidationError
 
 
@@ -41,7 +43,7 @@ class JQLValidator:
         upper = jql.upper()
 
         for keyword in self.FORBIDDEN_KEYWORDS:
-            if keyword in upper:
+            if re.search(r'\b' + keyword + r'\b', upper):
                 raise JiraValidationError(
                     f"Forbidden keyword in JQL: {keyword}"
                 )
@@ -95,7 +97,11 @@ class JQLValidator:
             parts.append(f'issuetype = "{issue_type}"')
 
         if not parts:
-            return "order by created DESC"
+            raise JiraValidationError(
+                "At least one filter (project, status, assignee, priority, "
+                "or issue type) is required. Jira Cloud does not allow "
+                "unbounded searches."
+            )
 
         return " AND ".join(parts) + " order by created DESC"
 

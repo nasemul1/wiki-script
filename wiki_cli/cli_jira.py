@@ -6,7 +6,7 @@ from wiki_cli.jira.manager import JiraManager
 from wiki_cli.jira.errors import JiraConfigError
 
 
-def test_jira_connection(jira: JiraManager) -> None:
+def check_jira_connection(jira: JiraManager) -> None:
     result = jira.test_connection()
     print(f"\nConnected as: {result['displayName']} ({result['emailAddress']})")
 
