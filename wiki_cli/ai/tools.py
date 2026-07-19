@@ -390,4 +390,131 @@ TOOLS = [
             },
         },
     },
+    # ── Jira ─────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "jira_test_connection",
+            "description": "Test connectivity to the Jira API and return authenticated user info.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jira_list_projects",
+            "description": "List all accessible Jira projects. Returns project keys, names, and types.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jira_search_issues",
+            "description": "Search Jira issues using filters or a raw JQL query. Returns matching issues with status, priority, and assignee.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "jql": {
+                        "type": "string",
+                        "description": "Raw JQL query (optional, validated for safety)",
+                    },
+                    "project": {
+                        "type": "string",
+                        "description": "Project key filter (e.g., 'PROJ')",
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "Status filter (e.g., 'In Progress')",
+                    },
+                    "assignee": {
+                        "type": "string",
+                        "description": "Assignee filter",
+                    },
+                    "priority": {
+                        "type": "string",
+                        "description": "Priority filter (e.g., 'High')",
+                    },
+                    "issue_type": {
+                        "type": "string",
+                        "description": "Issue type filter (e.g., 'Bug')",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jira_get_issue",
+            "description": "Get full details of a Jira issue by key. Returns summary, status, priority, assignee, reporter, labels, and description.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue_key": {
+                        "type": "string",
+                        "description": "Issue key (e.g., 'PROJ-123')",
+                    },
+                },
+                "required": ["issue_key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jira_get_comments",
+            "description": "Get all comments on a Jira issue.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue_key": {
+                        "type": "string",
+                        "description": "Issue key (e.g., 'PROJ-123')",
+                    },
+                },
+                "required": ["issue_key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jira_get_changelog",
+            "description": "Get the changelog (history of changes) for a Jira issue. Shows field changes with timestamps and authors.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue_key": {
+                        "type": "string",
+                        "description": "Issue key (e.g., 'PROJ-123')",
+                    },
+                },
+                "required": ["issue_key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jira_get_transitions",
+            "description": "Get available workflow transitions for a Jira issue (read-only, does not execute transitions).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "issue_key": {
+                        "type": "string",
+                        "description": "Issue key (e.g., 'PROJ-123')",
+                    },
+                },
+                "required": ["issue_key"],
+            },
+        },
+    },
 ]
