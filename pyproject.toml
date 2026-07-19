@@ -24,13 +24,16 @@ ai = [
     "openai>=1.0.0",
     "httpx>=0.25.0",
 ]
+jira = [
+    "jira>=3.5.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
 ]
 
 [tool.setuptools]
-packages = ["wiki_cli", "wiki_cli.pages", "wiki_cli.ai"]
+packages = ["wiki_cli", "wiki_cli.pages", "wiki_cli.ai", "wiki_cli.jira"]
 
 [tool.pytest.ini_options]
 pythonpath = ["tests"]
