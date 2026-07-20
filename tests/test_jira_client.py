@@ -124,15 +124,20 @@ class TestJiraClientIssue:
         assert result[0]["body"] == "Hello"
 
     def test_get_changelog(self, client, mock_jira_lib):
-        mock_issue = MagicMock()
-        history1 = MagicMock()
-        history1.raw = {"id": "500", "items": [{"field": "status"}]}
-        mock_issue.fields.changelog.histories = [history1]
-        mock_jira_lib.issue.return_value = mock_issue
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "values": [
+                {"id": "500", "items": [{"field": "status"}]},
+                {"id": "501", "items": [{"field": "assignee"}]},
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_jira_lib._session.get.return_value = mock_response
 
         result = client.get_changelog("PROJ-1")
-        assert len(result) == 1
+        assert len(result) == 2
         assert result[0]["id"] == "500"
+        assert result[1]["id"] == "501"
 
     def test_get_transitions(self, client, mock_jira_lib):
         mock_jira_lib.transitions.return_value = [

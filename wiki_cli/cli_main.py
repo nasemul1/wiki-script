@@ -59,13 +59,12 @@ MENU = """
   20. Jira: Get Issue Details
   21. Jira: View Issue Comments
   22. Jira: View Issue Changelog
-  23. Jira: View Available Transitions
 
   --- System ---
-  24. Test Wiki.js Connection
+  23. Test Wiki.js Connection
 
   --- AI ---
-  25. AI Assistant
+  24. AI Assistant
   0. Exit
 ========================================
 """
@@ -118,8 +117,8 @@ def main() -> None:
         "13": ("View Specific Revision", lambda: view_specific_revision(pages)),
         "14": ("Diff Two Revisions", lambda: diff_two_revisions(pages)),
         "15": ("Restore Revision", lambda: restore_revision(pages)),
-        "24": ("Test Wiki.js Connection", lambda: test_connection(client, pages)),
-        "25": ("AI Assistant", _ai_assistant),
+        "23": ("Test Wiki.js Connection", lambda: test_connection(client, pages)),
+        "24": ("AI Assistant", _ai_assistant),
     }
 
     jira_handlers = {
@@ -130,7 +129,6 @@ def main() -> None:
         "20": "get_jira_issue",
         "21": "view_issue_comments",
         "22": "view_issue_changelog",
-        "23": "view_issue_transitions",
     }
 
     while True:

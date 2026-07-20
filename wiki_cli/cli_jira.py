@@ -39,31 +39,19 @@ def get_jira_project(jira: JiraManager) -> None:
 
 
 def search_jira_issues(jira: JiraManager) -> None:
-    print("Search by:")
-    print("  1. Filter (safe, recommended)")
-    print("  2. Raw JQL (validated)")
-    choice = input("Choice [1]: ").strip() or "1"
+    project = input("Project key: ").strip() or None
+    status = input("Status (leave blank for all): ").strip() or None
+    assignee = input("Assignee (leave blank for all): ").strip() or None
+    priority = input("Priority (leave blank for all): ").strip() or None
+    issue_type = input("Issue type (leave blank for all): ").strip() or None
 
-    if choice == "2":
-        jql = input("JQL query: ").strip()
-        if not jql:
-            print("JQL query is required.")
-            return
-        issues = jira.search_issues(jql=jql)
-    else:
-        project = input("Project key (leave blank for all): ").strip() or None
-        status = input("Status (leave blank for all): ").strip() or None
-        assignee = input("Assignee (leave blank for all): ").strip() or None
-        priority = input("Priority (leave blank for all): ").strip() or None
-        issue_type = input("Issue type (leave blank for all): ").strip() or None
-
-        issues = jira.search_issues(
-            project=project,
-            status=status,
-            assignee=assignee,
-            priority=priority,
-            issue_type=issue_type,
-        )
+    issues = jira.search_issues(
+        project=project,
+        status=status,
+        assignee=assignee,
+        priority=priority,
+        issue_type=issue_type,
+    )
 
     if not issues:
         print("\nNo issues found.")

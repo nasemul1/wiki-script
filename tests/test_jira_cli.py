@@ -88,7 +88,7 @@ class TestSearchJiraIssues:
                 priority="High", issue_type="Bug",
             ),
         ]
-        inputs = iter(["1", "PROJ1", "", "", "", "", ""])
+        inputs = iter(["PROJ1", "", "", "", ""])
         with patch(INPUT_PATCH, side_effect=inputs):
             search_jira_issues(mock_manager)
         output = capsys.readouterr().out
@@ -97,24 +97,11 @@ class TestSearchJiraIssues:
 
     def test_search_no_results(self, mock_manager, capsys):
         mock_manager.search_issues.return_value = []
-        inputs = iter(["1", "", "", "", "", "", ""])
+        inputs = iter(["", "", "", "", ""])
         with patch(INPUT_PATCH, side_effect=inputs):
             search_jira_issues(mock_manager)
         output = capsys.readouterr().out
         assert "No issues found" in output
-
-    def test_search_by_jql(self, mock_manager, capsys):
-        mock_manager.search_issues.return_value = [
-            JiraIssue(
-                key="P-2", summary="Task", status="Closed",
-                priority="Low", issue_type="Task",
-            ),
-        ]
-        inputs = iter(["2", "project = P", ""])
-        with patch(INPUT_PATCH, side_effect=inputs):
-            search_jira_issues(mock_manager)
-        output = capsys.readouterr().out
-        assert "P-2" in output
 
 
 class TestGetJiraIssue:

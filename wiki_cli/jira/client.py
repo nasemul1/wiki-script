@@ -137,8 +137,11 @@ class JiraClient:
             WikiJSError: If the API call fails.
         """
         try:
-            issue = self._client.issue(issue_key, expand="changelog")
-            return [h.raw for h in issue.fields.changelog.histories]
+            url = f"{self.auth.server}/rest/api/2/issue/{issue_key}/changelog"
+            response = self._client._session.get(url)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("values", [])
         except Exception as exc:
             raise WikiJSError(
                 f"Failed to get changelog for '{issue_key}': {exc}"

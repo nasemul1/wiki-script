@@ -46,7 +46,7 @@ def test_menu_dispatches_handler(capsys):
 
 
 def test_menu_handles_error(capsys):
-    inputs = iter(["24", "", "0"])
+    inputs = iter(["23", "", "0"])
 
     with patch(INPUT_PATCH, side_effect=inputs):
         with patch("wiki_cli.cli_main.WikiJSClient") as mock_client:
