@@ -39,18 +39,27 @@ TOOL_LABELS = {
     "diff_revisions":  "Diffing revisions",
     "restore_revision": "Restoring revision",
     "test_connection": "Testing connection",
+    "jira_test_connection": "Jira: Testing connection",
+    "jira_list_projects":   "Jira: Listing projects",
+    "jira_search_issues":   "Jira: Searching issues",
+    "jira_get_issue":       "Jira: Getting issue",
+    "jira_get_comments":    "Jira: Getting comments",
+    "jira_get_changelog":   "Jira: Getting changelog",
+    "jira_get_transitions": "Jira: Getting transitions",
 }
 
 MAX_CONTEXT_TOKENS = 50_000
 
-SYSTEM_PROMPT = """You are a Wiki.js assistant. You manage wiki pages using the tools provided.
+SYSTEM_PROMPT = """You are a Wiki.js and Jira assistant. You manage wiki pages and Jira issues using the tools provided.
 
 Rules:
 - Always confirm with the user before performing destructive actions (delete, restore, move).
 - When creating or updating pages, generate high-quality Markdown content when the user provides a topic.
 - If a tool returns an error, explain it to the user and suggest fixes.
 - For searches or lists, summarize results in a readable format instead of dumping raw data.
-- Never fabricate page IDs or paths. Always fetch first if unsure.
+- Never fabricate page IDs, issue keys, or paths. Always fetch first if unsure.
+- For Jira, never attempt write operations (create, edit, comment). Only read data.
+- When showing Jira issues, group by status or priority for clarity.
 """
 
 
@@ -72,6 +81,17 @@ class WikiAgent:
             {"role": "system", "content": SYSTEM_PROMPT},
         ]
         self.quiet = False
+
+        # Jira (optional — gracefully unavailable if not configured)
+        self.jira_manager = None
+        try:
+            from wiki_cli.jira.client import JiraClient
+            from wiki_cli.jira.manager import JiraManager
+
+            jira_client = JiraClient()
+            self.jira_manager = JiraManager(jira_client)
+        except Exception:
+            pass
 
     def run(self, user_prompt: str) -> str:
         """Process a user prompt and return the AI's response.
@@ -209,6 +229,13 @@ class WikiAgent:
             "diff_revisions": self._tool_diff_revisions,
             "restore_revision": self._tool_restore_revision,
             "test_connection": self._tool_test_connection,
+            "jira_test_connection": self._tool_jira_test_connection,
+            "jira_list_projects": self._tool_jira_list_projects,
+            "jira_search_issues": self._tool_jira_search_issues,
+            "jira_get_issue": self._tool_jira_get_issue,
+            "jira_get_comments": self._tool_jira_get_comments,
+            "jira_get_changelog": self._tool_jira_get_changelog,
+            "jira_get_transitions": self._tool_jira_get_transitions,
         }
 
         handler = dispatch.get(name)
@@ -277,6 +304,26 @@ class WikiAgent:
             return f"  {C}page={args.get('page_id', '')} v{args.get('version_id_1', '')}→v{args.get('version_id_2', '')}{R}"
         if name == "restore_revision":
             return f"  {C}page={args.get('page_id', '')} → v{args.get('version_id', '')}{R}"
+        if name == "jira_test_connection":
+            return ""
+        if name == "jira_list_projects":
+            return ""
+        if name == "jira_search_issues":
+            if args.get("jql"):
+                return f"  {C}jql: {args['jql'][:50]}{R}"
+            parts = []
+            for key in ("project", "status", "assignee", "priority", "issue_type"):
+                if args.get(key):
+                    parts.append(f"{key}={args[key]}")
+            return f"  {C}{', '.join(parts)}{R}" if parts else ""
+        if name == "jira_get_issue":
+            return f"  {C}{args.get('issue_key', '')}{R}"
+        if name == "jira_get_comments":
+            return f"  {C}{args.get('issue_key', '')}{R}"
+        if name == "jira_get_changelog":
+            return f"  {C}{args.get('issue_key', '')}{R}"
+        if name == "jira_get_transitions":
+            return f"  {C}{args.get('issue_key', '')}{R}"
         return ""
 
     def _summarize_result(self, name: str, result: Any) -> str:
@@ -326,6 +373,27 @@ class WikiAgent:
             if isinstance(result, dict) and result.get("status") == "connected":
                 return f"connected ({result.get('total_pages', '?')} pages)"
             return "connection failed"
+        if name == "jira_test_connection":
+            if isinstance(result, dict) and "displayName" in result:
+                return f"connected as {result['displayName']}"
+            return result.get("error", "connection failed")
+        if name == "jira_list_projects":
+            total = result.get("total", "?") if isinstance(result, dict) else "?"
+            return f"{total} projects"
+        if name == "jira_search_issues":
+            total = result.get("total", "?") if isinstance(result, dict) else "?"
+            return f"{total} issues found"
+        if name == "jira_get_issue":
+            return f"issue {getattr(result, 'key', result.get('key', '?'))}" if isinstance(result, dict) else "issue fetched"
+        if name == "jira_get_comments":
+            total = result.get("total", "?") if isinstance(result, dict) else "?"
+            return f"{total} comments"
+        if name == "jira_get_changelog":
+            total = result.get("total", "?") if isinstance(result, dict) else "?"
+            return f"{total} changes"
+        if name == "jira_get_transitions":
+            total = result.get("total", "?") if isinstance(result, dict) else "?"
+            return f"{total} transitions"
         return "done"
 
     # ── Tool Handlers ─────────────────────────────────────────────────
@@ -579,3 +647,68 @@ class WikiAgent:
             }
         except Exception as e:
             return {"status": "failed", "error": str(e)}
+
+    # ── Jira Tool Handlers ───────────────────────────────────────────
+
+    def _tool_jira_test_connection(self, args: dict) -> Any:
+        if not self.jira_manager:
+            return {"error": "Jira is not configured. Set JIRA_SERVER, JIRA_EMAIL, and JIRA_API_TOKEN."}
+        return self.jira_manager.test_connection()
+
+    def _tool_jira_list_projects(self, args: dict) -> Any:
+        if not self.jira_manager:
+            return {"error": "Jira is not configured."}
+        projects = self.jira_manager.list_projects()
+        return {
+            "total": len(projects),
+            "projects": [p.model_dump() for p in projects],
+        }
+
+    def _tool_jira_search_issues(self, args: dict) -> Any:
+        if not self.jira_manager:
+            return {"error": "Jira is not configured."}
+        issues = self.jira_manager.search_issues(
+            jql=args.get("jql"),
+            project=args.get("project"),
+            status=args.get("status"),
+            assignee=args.get("assignee"),
+            priority=args.get("priority"),
+            issue_type=args.get("issue_type"),
+        )
+        return {
+            "total": len(issues),
+            "issues": [i.model_dump() for i in issues],
+        }
+
+    def _tool_jira_get_issue(self, args: dict) -> Any:
+        if not self.jira_manager:
+            return {"error": "Jira is not configured."}
+        issue = self.jira_manager.get_issue(args["issue_key"])
+        return issue.model_dump()
+
+    def _tool_jira_get_comments(self, args: dict) -> Any:
+        if not self.jira_manager:
+            return {"error": "Jira is not configured."}
+        comments = self.jira_manager.get_comments(args["issue_key"])
+        return {
+            "total": len(comments),
+            "comments": [c.model_dump() for c in comments],
+        }
+
+    def _tool_jira_get_changelog(self, args: dict) -> Any:
+        if not self.jira_manager:
+            return {"error": "Jira is not configured."}
+        entries = self.jira_manager.get_changelog(args["issue_key"])
+        return {
+            "total": len(entries),
+            "entries": [e.model_dump() for e in entries],
+        }
+
+    def _tool_jira_get_transitions(self, args: dict) -> Any:
+        if not self.jira_manager:
+            return {"error": "Jira is not configured."}
+        transitions = self.jira_manager.get_transitions(args["issue_key"])
+        return {
+            "total": len(transitions),
+            "transitions": [t.model_dump() for t in transitions],
+        }

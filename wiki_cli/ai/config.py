@@ -76,26 +76,32 @@ PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
     "openai": {
         "base_url": "https://api.openai.com/v1",
         "models_url": "https://api.openai.com/v1/models",
+        "default_model": "gpt-4o",
     },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "models_url": "https://openrouter.ai/api/v1/models",
+        "default_model": "meta-llama/llama-4-scout:free",
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
         "models_url": "https://api.groq.com/openai/v1/models",
+        "default_model": "llama-3.3-70b-versatile",
     },
     "mistral": {
         "base_url": "https://api.mistral.ai/v1",
         "models_url": "https://api.mistral.ai/v1/models",
+        "default_model": "mistral-small-latest",
     },
     "ollama": {
         "base_url": "http://localhost:11434/v1",
         "models_url": "http://localhost:11434/api/tags",
+        "default_model": "llama3",
     },
     "ollama-cloud": {
         "base_url": "",
         "models_url": "",
+        "default_model": "",
     },
 }
 
@@ -156,6 +162,11 @@ def fetch_models(provider: str, api_key: str = "", base_url: str = "") -> list[s
 
     if provider == "ollama":
         return sorted(m.get("name", "") for m in data.get("models", []) if m.get("name"))
+
+    # Mistral returns a list directly, not wrapped in "data"
+    if provider == "mistral":
+        models = data if isinstance(data, list) else data.get("data", [])
+        return sorted(m.get("id", "") for m in models if m.get("id"))
 
     models = data.get("data", [])
     ids = sorted(m.get("id", "") for m in models if m.get("id"))

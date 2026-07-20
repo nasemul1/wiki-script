@@ -1,6 +1,6 @@
 # wiki-script
 
-Terminal-based Wiki.js manager. Manage pages, revisions, and content entirely from the CLI — or use natural language with the AI assistant.
+Terminal-based Wiki.js manager with Jira integration. Manage pages, revisions, and content entirely from the CLI — query Jira issues and projects — or use natural language with the AI assistant.
 
 ## Installation
 
@@ -24,18 +24,50 @@ For AI assistant support:
 pip install -e ".[ai]"
 ```
 
+For Jira integration:
+
+```bash
+pip install -e ".[jira]"
+```
+
+For all extras:
+
+```bash
+pip install -e ".[ai,jira]"
+```
+
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in your Wiki.js credentials:
+Copy `.env.example` to `.env` and fill in your credentials:
 
 ```bash
 cp .env.example .env
 ```
 
+### Wiki.js
+
 ```env
 WIKIJS_URL=https://your-wiki-instance.com/graphql
 WIKIJS_API_KEY=your_api_key_here
 ```
+
+### Jira (optional)
+
+```env
+JIRA_SERVER=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email@example.com
+JIRA_API_TOKEN=your_api_token_here
+JIRA_PROJECT_ALLOWLIST=PROJ1,PROJ2,PROJ3
+JIRA_TIMEOUT=30
+JIRA_MAX_RESULTS=50
+```
+
+- **JIRA_SERVER** — Your Jira instance URL
+- **JIRA_EMAIL** — Your Jira account email
+- **JIRA_API_TOKEN** — API token from Jira (Profile > Personal Access Tokens)
+- **JIRA_PROJECT_ALLOWLIST** — Comma-separated project keys to access (leave empty for all)
+- **JIRA_TIMEOUT** — Request timeout in seconds (default 30)
+- **JIRA_MAX_RESULTS** — Max issues per search (default 50)
 
 ## Usage
 
@@ -76,16 +108,56 @@ You'll see the main menu:
   14. Diff Two Revisions
   15. Restore Revision
 
+  --- Jira ---
+  16. Jira: Test Connection
+  17. Jira: List Projects
+  18. Jira: Get Project Details
+  19. Jira: Search Issues
+  20. Jira: Get Issue Details
+  21. Jira: View Issue Comments
+  22. Jira: View Issue Changelog
+  23. Jira: View Available Transitions
+
   --- System ---
-  16. Test Connection
+  24. Test Wiki.js Connection
 
   --- AI ---
-  17. AI Assistant
+  25. AI Assistant
   0. Exit
 ========================================
 ```
 
 Select an option by entering the number.
+
+### Jira Usage
+
+Jira is lazy-initialized — it only connects when you select a Jira option (16–23). If credentials are missing, you'll see an error message with setup instructions.
+
+**Example workflows:**
+
+```
+# Test connection
+> 16
+
+# List all accessible projects
+> 17
+
+# Search issues by filter
+> 19
+Search by:  1. Filter (safe)  2. Raw JQL
+> 1
+Project key: PROJ1
+Status: In Progress
+Assignee: Nasimul
+
+# Get full issue details
+> 20
+Issue key: PROJ1-42
+
+# View issue changelog
+> 22
+Issue key: PROJ1-42
+```
 
 ### AI Assistant
 
@@ -95,7 +167,7 @@ Start the AI assistant directly:
 wiki-ai
 ```
 
-Or from the main menu, select option 17.
+Or from the main menu, select option 25.
 
 On first run, you'll set up your AI provider:
 
@@ -129,7 +201,7 @@ Supported providers:
 
 API keys are saved to `~/.config/wiki-cli/credentials.json` (permissions `0600`). On subsequent runs, it skips provider selection and goes straight to chat.
 
-Once configured, use natural language:
+Once configured, use natural language for both Wiki.js and Jira:
 
 ```
   provider:  OpenRouter
@@ -138,10 +210,11 @@ Once configured, use natural language:
   > list all pages
   > create a page at docs/getting-started with title "Getting Started"
   > search for pages about "api"
-  > update page 5 title to "New Title"
-  > show the history of page 3
-  > delete page 12
-  > what's the diff between revision 1 and 2 of page 7
+  > show issues assigned to Nasimul in project PROJ1
+  > what are the high priority bugs in PROJ2
+  > show the changelog for PROJ1-42
+  > what transitions are available for PROJ1-42
+  > show blockers in project PROJ1
 ```
 
 #### AI Commands
@@ -155,6 +228,8 @@ Once configured, use natural language:
 | `exit` | Quit |
 
 ### As a Library
+
+#### Wiki.js
 
 ```python
 from wiki_cli import WikiJSClient, PagesManager, Page
@@ -197,14 +272,55 @@ pages.restore_version(resp.page.id, history[0].versionId)
 # Delete
 pages.delete(resp.page.id)
 
-# Export to file
-pages.export_to_file(resp.page.id, "export.md")
-
-# Import from file
-pages.import_from_file("import.md", "docs/imported")
-
 # Connection test
 pages.test_connection()
+```
+
+#### Jira
+
+```python
+from wiki_cli.jira import JiraClient, JiraManager
+
+client = JiraClient()
+jira = JiraManager(client)
+
+# Test connection
+user = jira.test_connection()
+print(f"Connected as: {user['displayName']}")
+
+# List projects
+projects = jira.list_projects()
+for p in projects:
+    print(f"{p.key}: {p.name}")
+
+# Search issues
+issues = jira.search_issues(project="PROJ1", status="In Progress")
+for i in issues:
+    print(f"{i.key}: {i.summary} [{i.status}]")
+
+# Search with raw JQL (validated for safety)
+issues = jira.search_issues(jql='project = PROJ1 AND priority = "High"')
+
+# Get issue details
+issue = jira.get_issue("PROJ1-42")
+print(f"{issue.key}: {issue.summary}")
+print(f"Status: {issue.status}, Priority: {issue.priority}")
+print(f"Assignee: {issue.assignee}, Reporter: {issue.reporter}")
+
+# Get comments
+comments = jira.get_comments("PROJ1-42")
+for c in comments:
+    print(f"{c.author}: {c.body[:80]}")
+
+# Get changelog
+changelog = jira.get_changelog("PROJ1-42")
+for entry in changelog:
+    print(f"{entry.field}: {entry.from_value} -> {entry.to_value}")
+
+# Get available transitions
+transitions = jira.get_transitions("PROJ1-42")
+for t in transitions:
+    print(f"{t.name} -> {t.to_status}")
 ```
 
 ## Features
@@ -234,6 +350,19 @@ pages.test_connection()
 | **Diff** | Compare two revisions side by side |
 | **Restore** | Rollback to any previous version |
 
+### Jira (Read-only)
+
+| Feature | Description |
+|---------|-------------|
+| **Test Connection** | Verify Jira API connectivity and return user info |
+| **List Projects** | List accessible projects (filtered by allowlist) |
+| **Get Project** | Retrieve project metadata by key |
+| **Search Issues** | Search using filters or validated JQL queries |
+| **Get Issue** | Full issue details: status, priority, assignee, labels |
+| **Get Comments** | View comment thread on an issue |
+| **Get Changelog** | View history of field changes on an issue |
+| **Get Transitions** | Inspect available workflow transitions (read-only) |
+
 ### System
 
 | Feature | Description |
@@ -244,11 +373,11 @@ pages.test_connection()
 
 | Feature | Description |
 |---------|-------------|
-| **Natural language** | Manage pages using plain English prompts |
+| **Natural language** | Manage pages and query Jira using plain English |
 | **Multi-provider** | Switch between OpenRouter, Groq, OpenAI, Mistral, Ollama |
 | **Live model list** | Models fetched from provider API, not hardcoded |
 | **Persistent config** | API keys and last-used provider/model saved locally |
-| **16 tools** | AI can perform all page operations, history, search, and more |
+| **24 tools** | AI can perform all Wiki.js + Jira operations |
 
 ## Project Structure
 
@@ -263,61 +392,41 @@ wiki-script/
 │   ├── cli_main.py                # Menu loop & handler dispatch
 │   ├── cli_pages.py               # Page CRUD handlers
 │   ├── cli_history.py             # History/revision handlers
+│   ├── cli_jira.py                # Jira CLI handlers
 │   ├── cli_system.py              # System handlers
 │   ├── pages/
 │   │   ├── __init__.py            # Re-exports PagesManager
 │   │   ├── manager.py             # PagesManager class
 │   │   ├── queries.py             # GraphQL CRUD queries/mutations
 │   │   └── history.py             # GraphQL history queries/mutations
+│   ├── jira/
+│   │   ├── __init__.py            # Jira exports
+│   │   ├── client.py              # JiraClient (REST API wrapper)
+│   │   ├── manager.py             # JiraManager (business logic)
+│   │   ├── models.py              # JiraProject, JiraIssue, JiraComment, etc.
+│   │   ├── auth.py                # Authentication handling
+│   │   ├── jql.py                 # JQL validation & safe query building
+│   │   └── errors.py              # Jira-specific error types
 │   └── ai/
 │       ├── __init__.py            # AI package exports
 │       ├── config.py              # Provider config, API key storage
 │       ├── tools.py               # Tool schemas for LLM function calling
 │       ├── agent.py               # WikiAgent (tool dispatch, LLM loop)
 │       └── cli.py                 # AI assistant terminal UI
-├── tests/                         # 67 tests
+├── tests/                         # 215 tests
 │   ├── conftest.py                # Shared fixtures
-│   ├── test_create_page.py        # Create Page (6 tests)
-│   ├── create_page/               # success.py, validation.py, defaults.py
-│   ├── test_fetch_page.py         # Fetch Page (5 tests)
-│   ├── fetch_page/                # success.py, validation.py
-│   ├── test_update_page.py        # Update Page (5 tests)
-│   ├── update_page/               # success.py, validation.py
-│   ├── test_delete_page.py        # Delete Page (3 tests)
-│   ├── delete_page/               # success.py, validation.py
-│   ├── test_list_pages.py         # List Pages (5 tests)
-│   ├── list_pages/                # success.py
-│   ├── test_search_pages.py       # Search Pages (5 tests)
-│   ├── search_pages/              # success.py
-│   ├── test_browse_tree.py        # Browse Tree (4 tests)
-│   ├── browse_tree/               # success.py
-│   ├── test_move_rename.py        # Move/Rename (4 tests)
-│   ├── move_rename/               # success.py
-│   ├── test_clone_page.py         # Clone Page (3 tests)
-│   ├── clone_page/                # success.py
-│   ├── test_export_page.py        # Export Page (3 tests)
-│   ├── export_page/               # success.py
-│   ├── test_import_page.py        # Import Page (4 tests)
-│   ├── import_page/               # success.py
-│   ├── test_view_history.py       # View History (3 tests)
-│   ├── view_history/              # success.py
-│   ├── test_view_revision.py      # View Revision (3 tests)
-│   ├── view_revision/             # success.py
-│   ├── test_diff_revisions.py     # Diff Revisions (4 tests)
-│   ├── diff_revisions/            # success.py
-│   ├── test_restore_revision.py   # Restore Revision (4 tests)
-│   ├── restore_revision/          # success.py
-│   ├── test_connection.py         # Test Connection (2 tests)
-│   ├── connection/                # success.py
-│   ├── test_main_menu.py          # Main Menu (4 tests)
-│   └── main_menu/                 # success.py
+│   ├── test_jql_safety.py         # JQL injection tests (38)
+│   ├── test_jira_models.py        # Jira model tests (16)
+│   ├── test_jira_config.py        # Config & auth tests (10)
+│   ├── test_jira_manager.py       # Manager operation tests (18)
+│   ├── test_jira_client.py        # Client tests (14)
+│   ├── test_jira_cli.py           # CLI handler tests (16)
+│   ├── test_jira_ai_tools.py      # AI tool dispatch tests (19)
+│   └── ... (Wiki.js tests)
 ├── pyproject.toml
 ├── requirements.txt
 ├── .env.example
-├── AI_INTEGRATION.md              # AI assistant documentation
-├── README.md
-├── TEST_PLAN.md
-└── plan.md
+└── README.md
 ```
 
 ## Dependencies
@@ -331,6 +440,9 @@ wiki-script/
 **AI (optional):**
 - `openai` — OpenAI-compatible API client (works with all providers)
 - `httpx` — HTTP client for model listing
+
+**Jira (optional):**
+- `jira` — Jira REST API client
 
 **Dev:**
 - `pytest` — Test framework
@@ -350,10 +462,16 @@ Run all tests:
 pytest tests/ -v
 ```
 
-Run a specific feature:
+Run Jira-specific tests:
 
 ```bash
-pytest tests/test_create_page.py -v
+pytest tests/test_jql_safety.py tests/test_jira_*.py -v
+```
+
+Run a specific test file:
+
+```bash
+pytest tests/test_jira_manager.py -v
 ```
 
 Run with coverage:
@@ -362,19 +480,24 @@ Run with coverage:
 pytest tests/ -v --cov=wiki_cli --cov-report=term-missing
 ```
 
-### Test Structure
+### Test Breakdown
 
-Each feature has a modular test layout:
+| Category | Tests |
+|----------|-------|
+| Wiki.js (existing) | 67 |
+| JQL safety & injection | 38 |
+| Jira models | 16 |
+| Jira config & auth | 10 |
+| Jira manager | 18 |
+| Jira client | 14 |
+| Jira CLI handlers | 16 |
+| Jira AI tools | 19 |
+| **Total** | **215** |
 
-```
-tests/
-├── test_create_page.py        # Test file (calls functions below)
-├── create_page/
-│   ├── success.py             # Happy path tests
-│   ├── validation.py          # Error handling tests
-│   └── defaults.py            # Default value tests
-```
+## Security
 
-- **`success.py`** — Feature works correctly with valid inputs
-- **`validation.py`** — Invalid/missing inputs are rejected
-- **`defaults.py`** — Default values applied when fields left blank
+- **JQL injection prevention** — All JQL queries are validated against forbidden keywords and patterns
+- **Project allowlisting** — Only approved projects are accessible
+- **Credential safety** — API tokens stored in `.env` (gitignored) or `~/.config/wiki-cli/credentials.json` (permissions `0600`)
+- **Read-only by design** — Jira connector cannot create, edit, or delete issues
+- **No secrets in logs** — Credentials are never printed or logged

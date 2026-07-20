@@ -16,4 +16,31 @@ __all__ = [
     "PagesManager",
     "main",
 ]
+
+# Jira exports (optional — requires jira package)
+try:
+    from wiki_cli.jira import (
+        JiraClient,
+        JiraManager,
+        JiraProject,
+        JiraIssue,
+        JiraComment,
+        JiraChangelogEntry,
+        JiraTransition,
+        JQLValidator,
+    )
+
+    __all__ += [
+        "JiraClient",
+        "JiraManager",
+        "JiraProject",
+        "JiraIssue",
+        "JiraComment",
+        "JiraChangelogEntry",
+        "JiraTransition",
+        "JQLValidator",
+    ]
+except ImportError:
+    pass
+
 __version__ = "0.1.0"
