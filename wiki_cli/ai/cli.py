@@ -27,6 +27,13 @@ from wiki_cli.ai.config import (
     remove_key,
     list_saved_keys,
 )
+from wiki_cli.wikis import (
+    get_active_client,
+    list_wikis,
+    remove_wiki,
+    switch_wiki_flow,
+)
+from wiki_cli.pages import PagesManager
 
 PROVIDERS = [
     ("openai", "OpenAI"),
@@ -314,10 +321,57 @@ def _cmd_help() -> None:
     {C}/clear{R}          clear conversation history
     {C}/providers{R}      switch provider
     {C}/models{R}         switch model
+    {C}/switch-wiki{R}    switch active wiki (interactive, or /switch-wiki <name> or --new)
+    {C}/wikis{R}          list saved wikis
+    {C}/remove-wiki{R}    remove a wiki profile (/remove-wiki [name])
     {C}/remove-key{R}     remove saved api key
     {C}/help{R}           show this help
     {C}exit{R}            quit
 """)
+
+
+def _cmd_switch_wiki(agent: WikiAgent, arg: str) -> None:
+    """Rebuild agent.wiki_client + agent.pages after switching."""
+    new_client = switch_wiki_flow(arg)
+    agent.wiki_client = new_client
+    agent.pages = PagesManager(new_client)
+    print()
+
+
+def _cmd_wikis() -> None:
+    data = list_wikis()
+    active = None
+    try:
+        from wiki_cli.wikis import get_active_wiki_name
+        active = get_active_wiki_name()
+    except Exception:
+        pass
+
+    if not data:
+        print(f"  {D}no saved wikis{R}\n")
+        return
+
+    print(f"  {D}saved wikis:{R}")
+    print()
+    for name in sorted(data):
+        marker = f" {G}*{R}" if name == active else "  "
+        print(f"  {marker} {B}{name}{R}  {data[name]['url']}")
+    print()
+
+
+def _cmd_remove_wiki(agent: WikiAgent, arg: str) -> None:
+    from wiki_cli.wikis import get_active_wiki_name, set_active_wiki
+
+    target = arg.strip() or get_active_wiki_name()
+    if not target:
+        print(f"  {Y}no wiki specified and no active wiki{R}\n")
+        return
+    remove_wiki(target)
+    if get_active_wiki_name() == target:
+        set_active_wiki(None)
+        agent.wiki_client = None
+        agent.pages = None
+    print(f"  {G}removed '{target}'{R}\n")
 
 
 # ── Main ────────────────────────────────────────────────────────────
@@ -326,15 +380,21 @@ def ai_mode() -> None:
     _banner()
 
     try:
+        try:
+            client = get_active_client()
+        except WikiJSError:
+            print(f"  {D}no active wiki. let's configure one.{R}\n")
+            client = switch_wiki_flow()
+
         last = _load_last_config()
         if last and get_saved_key(last.get("provider", "")):
             provider = last["provider"]
             model = last["model"]
             config = _build_config_from_saved(provider, model)
-            agent = WikiAgent(config)
+            agent = WikiAgent(config=config, wiki_client=client)
         else:
             config = _build_config()
-            agent = WikiAgent(config)
+            agent = WikiAgent(config=config, wiki_client=client)
 
     except WikiJSError as exc:
         print(f"  {Y}error: {exc}{R}", file=sys.stderr)
@@ -379,6 +439,23 @@ def ai_mode() -> None:
             continue
         if prompt == "/remove-key":
             _cmd_remove_key(agent)
+            continue
+        if prompt.startswith("/switch-wiki"):
+            arg = prompt[len("/switch-wiki"):].strip()
+            try:
+                _cmd_switch_wiki(agent, arg)
+            except WikiJSError as exc:
+                print(f"  {Y}{exc}{R}\n")
+            continue
+        if prompt == "/wikis":
+            _cmd_wikis()
+            continue
+        if prompt.startswith("/remove-wiki"):
+            arg = prompt[len("/remove-wiki"):].strip()
+            try:
+                _cmd_remove_wiki(agent, arg)
+            except WikiJSError as exc:
+                print(f"  {Y}{exc}{R}\n")
             continue
         if prompt.lower() in ("exit", "quit", "q"):
             break
