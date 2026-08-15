@@ -124,6 +124,16 @@ def get_active_client():
     return WikiJSClient(url=entry["url"], api_key=entry["api_key"])
 
 
+def _read_api_key() -> str:
+    """Prompt for an API key. Try getpass first (hides echo); fall back to
+    plain input() when no tty is available so users can still paste."""
+    try:
+        return getpass.getpass("  api key: ").strip()
+    except (OSError, EOFError):
+        print("  (echo enabled — no tty for hidden input)")
+        return input("  api key: ").strip()
+
+
 def _prompt_new_profile() -> tuple[str, str, str]:
     while True:
         name = input("  name: ").strip()
@@ -142,7 +152,7 @@ def _prompt_new_profile() -> tuple[str, str, str]:
         print("  url must start with http:// or https://")
 
     while True:
-        api_key = getpass.getpass("  api key: ").strip()
+        api_key = _read_api_key()
         if api_key:
             return name, url, api_key
         print("  required")

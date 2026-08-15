@@ -157,3 +157,13 @@ def test_switch_wiki_flow_interactive_picks_existing(tmp_config):
         client = wikis.switch_wiki_flow()
     assert client.url == "https://a.com/graphql"
     assert wikis.get_active_wiki_name() == "a"
+
+
+def test_switch_wiki_flow_new_falls_back_to_input_when_getpass_fails(tmp_config):
+    """If getpass raises OSError (no tty), prompt via plain input() so pasting works."""
+    inputs = iter(["work", "https://work.com/graphql", "secret"])
+    with patch("builtins.input", side_effect=inputs):
+        with patch("wiki_cli.wikis.getpass.getpass", side_effect=OSError("no tty")):
+            client = wikis.switch_wiki_flow("--new")
+    assert wikis.get_active_wiki_name() == "work"
+    assert wikis.get_wiki("work")["api_key"] == "secret"
