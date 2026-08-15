@@ -125,8 +125,7 @@ dev = [
 
 ```env
 # .env.example — add Jira section
-WIKIJS_URL=https://your-wiki-instance.com/graphql
-WIKIJS_API_KEY=your_api_key_here
+# Wiki credentials are managed via /switch-wiki — see README Configuration section.
 
 JIRA_SERVER=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com

@@ -163,9 +163,9 @@ Once configured, use natural language:
 ### As a Library
 
 ```python
-from wiki_cli import WikiJSClient, PagesManager, Page
+from wiki_cli import WikiJSClient, get_active_client, PagesManager, Page
 
-client = WikiJSClient()
+client = get_active_client()
 pages = PagesManager(client)
 
 # Create a page
