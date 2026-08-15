@@ -72,9 +72,18 @@ class WikiAgent:
         client: The underlying LLM client (OpenAI-compatible).
     """
 
-    def __init__(self, config: AIConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: AIConfig | None = None,
+        wiki_client: WikiJSClient | None = None,
+    ) -> None:
         self.config = config or AIConfig()
-        self.wiki_client = WikiJSClient()
+        if wiki_client is None:
+            from wiki_cli.wikis import get_active_client
+
+            self.wiki_client = get_active_client()
+        else:
+            self.wiki_client = wiki_client
         self.pages = PagesManager(self.wiki_client)
         self.client = self.config.get_client()
         self.messages: list[dict[str, Any]] = [
