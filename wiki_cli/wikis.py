@@ -7,6 +7,7 @@ Files (under ~/.config/wiki-cli/):
 
 from __future__ import annotations
 
+import getpass
 import json
 from pathlib import Path
 
@@ -108,3 +109,98 @@ def set_active_wiki(name: str | None) -> None:
     else:
         ACTIVE_FILE.write_text(name + "\n")
     _ensure_mode(ACTIVE_FILE)
+
+
+def get_active_client():
+    """Return a WikiJSClient for the active profile. Raises WikiJSError if none."""
+    from wiki_cli.client import WikiJSClient
+
+    name = get_active_wiki_name()
+    if not name:
+        raise WikiJSError("no active wiki. run /switch-wiki to configure one.")
+    entry = get_wiki(name)
+    if not entry:
+        raise WikiJSError("no active wiki. run /switch-wiki to configure one.")
+    return WikiJSClient(url=entry["url"], api_key=entry["api_key"])
+
+
+def _prompt_new_profile() -> tuple[str, str, str]:
+    while True:
+        name = input("  name: ").strip()
+        if not name:
+            print("  required")
+            continue
+        if any(ch.isspace() for ch in name):
+            print("  no spaces allowed")
+            continue
+        break
+
+    while True:
+        url = input("  url: ").strip()
+        if url.startswith("http://") or url.startswith("https://"):
+            break
+        print("  url must start with http:// or https://")
+
+    while True:
+        api_key = getpass.getpass("  api key: ").strip()
+        if api_key:
+            return name, url, api_key
+        print("  required")
+
+    return "", "", ""  # unreachable
+
+
+def switch_wiki_flow(arg: str = "") -> "WikiJSClient":
+    """Interactive wiki switcher. Returns a freshly-built WikiJSClient.
+
+    Args:
+        arg: "" → interactive picker. "<name>" → jump to that profile.
+             "--new" → force new-profile flow.
+    """
+    from wiki_cli.client import WikiJSClient
+
+    if arg == "--new":
+        name, url, api_key = _prompt_new_profile()
+        save_wiki(name, url, api_key)
+        set_active_wiki(name)
+        print(f"  saved → active: {name}")
+        return WikiJSClient(url=url, api_key=api_key)
+
+    if arg:
+        entry = get_wiki(arg)
+        if not entry:
+            raise WikiJSError(f"wiki '{arg}' not found")
+        set_active_wiki(arg)
+        print(f"  switched → {arg}")
+        return WikiJSClient(url=entry["url"], api_key=entry["api_key"])
+
+    data = list_wikis()
+    names = sorted(data.keys())
+
+    if names:
+        print("  saved wikis:")
+        for i, n in enumerate(names, 1):
+            print(f"    {i}    {n:<16} {data[n]['url']}")
+        print(f"    {len(names) + 1}    add new")
+        print()
+        while True:
+            choice = input("  > ").strip() or "1"
+            if choice.isdigit():
+                idx = int(choice)
+                if 1 <= idx <= len(names):
+                    picked = names[idx - 1]
+                    set_active_wiki(picked)
+                    print(f"  switched → {picked}")
+                    entry = data[picked]
+                    return WikiJSClient(url=entry["url"], api_key=entry["api_key"])
+                if idx == len(names) + 1:
+                    break
+            print("  invalid choice")
+    else:
+        print("  no saved wikis")
+
+    name, url, api_key = _prompt_new_profile()
+    save_wiki(name, url, api_key)
+    set_active_wiki(name)
+    print(f"  saved → active: {name}")
+    return WikiJSClient(url=url, api_key=api_key)

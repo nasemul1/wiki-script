@@ -101,3 +101,59 @@ def test_load_corrupt_json_returns_empty(tmp_config):
     f1, _ = tmp_config
     f1.write_text("{not json")
     assert wikis.list_wikis() == {}
+
+
+def test_get_active_client_raises_when_none(tmp_config):
+    with pytest.raises(WikiJSError, match="no active wiki"):
+        wikis.get_active_client()
+
+
+def test_get_active_client_raises_when_active_missing(tmp_config):
+    _, f2 = tmp_config
+    f2.write_text("ghost")
+    with pytest.raises(WikiJSError, match="no active wiki"):
+        wikis.get_active_client()
+
+
+def test_get_active_client_returns_client(tmp_config):
+    wikis.save_wiki("w", "https://w.com/graphql", "k")
+    wikis.set_active_wiki("w")
+    client = wikis.get_active_client()
+    assert client.url == "https://w.com/graphql"
+    assert client.api_key == "k"
+
+
+def test_switch_wiki_flow_jumps_to_named(tmp_config, capsys):
+    wikis.save_wiki("work", "https://work.com/graphql", "wk")
+    client = wikis.switch_wiki_flow("work")
+    assert client.url == "https://work.com/graphql"
+    assert wikis.get_active_wiki_name() == "work"
+    out = capsys.readouterr().out
+    assert "work" in out
+
+
+def test_switch_wiki_flow_named_missing_no_state_change(tmp_config, capsys):
+    wikis.save_wiki("a", "https://a.com/graphql", "k")
+    wikis.set_active_wiki("a")
+    with pytest.raises(WikiJSError):
+        wikis.switch_wiki_flow("ghost")
+    assert wikis.get_active_wiki_name() == "a"
+
+
+def test_switch_wiki_flow_new_creates_profile(tmp_config):
+    inputs = iter(["work", "https://work.com/graphql", "secret"])
+    with patch("builtins.input", side_effect=inputs):
+        with patch("wiki_cli.wikis.getpass.getpass", return_value="secret"):
+            client = wikis.switch_wiki_flow("--new")
+    assert wikis.get_active_wiki_name() == "work"
+    assert client.url == "https://work.com/graphql"
+    assert wikis.get_wiki("work")["api_key"] == "secret"
+
+
+def test_switch_wiki_flow_interactive_picks_existing(tmp_config):
+    wikis.save_wiki("a", "https://a.com/graphql", "ka")
+    inputs = iter(["1"])
+    with patch("builtins.input", side_effect=inputs):
+        client = wikis.switch_wiki_flow()
+    assert client.url == "https://a.com/graphql"
+    assert wikis.get_active_wiki_name() == "a"
