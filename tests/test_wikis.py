@@ -143,8 +143,7 @@ def test_switch_wiki_flow_named_missing_no_state_change(tmp_config, capsys):
 def test_switch_wiki_flow_new_creates_profile(tmp_config):
     inputs = iter(["work", "https://work.com/graphql", "secret"])
     with patch("builtins.input", side_effect=inputs):
-        with patch("wiki_cli.wikis.getpass.getpass", return_value="secret"):
-            client = wikis.switch_wiki_flow("--new")
+        client = wikis.switch_wiki_flow("--new")
     assert wikis.get_active_wiki_name() == "work"
     assert client.url == "https://work.com/graphql"
     assert wikis.get_wiki("work")["api_key"] == "secret"
@@ -159,11 +158,14 @@ def test_switch_wiki_flow_interactive_picks_existing(tmp_config):
     assert wikis.get_active_wiki_name() == "a"
 
 
-def test_switch_wiki_flow_new_falls_back_to_input_when_getpass_fails(tmp_config):
-    """If getpass raises OSError (no tty), prompt via plain input() so pasting works."""
-    inputs = iter(["work", "https://work.com/graphql", "secret"])
-    with patch("builtins.input", side_effect=inputs):
-        with patch("wiki_cli.wikis.getpass.getpass", side_effect=OSError("no tty")):
-            client = wikis.switch_wiki_flow("--new")
-    assert wikis.get_active_wiki_name() == "work"
-    assert wikis.get_wiki("work")["api_key"] == "secret"
+def test_read_api_key_uses_input_paste_safe(tmp_config):
+    """API key prompt uses plain input() so paste works in any terminal.
+
+    getpass.getpass() can hang/fail on paste in some terminals (bracketed
+    paste mode, kitty, wezterm quirks). Plain input() reads the whole line
+    including pasted content, matching how _enter_api_key works for AI
+    provider keys in wiki_cli/ai/cli.py.
+    """
+    from wiki_cli.wikis import _read_api_key
+    with patch("builtins.input", return_value="mykey"):
+        assert _read_api_key() == "mykey"

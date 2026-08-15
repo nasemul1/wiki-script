@@ -7,7 +7,6 @@ Files (under ~/.config/wiki-cli/):
 
 from __future__ import annotations
 
-import getpass
 import json
 from pathlib import Path
 
@@ -125,13 +124,14 @@ def get_active_client():
 
 
 def _read_api_key() -> str:
-    """Prompt for an API key. Try getpass first (hides echo); fall back to
-    plain input() when no tty is available so users can still paste."""
-    try:
-        return getpass.getpass("  api key: ").strip()
-    except (OSError, EOFError):
-        print("  (echo enabled — no tty for hidden input)")
-        return input("  api key: ").strip()
+    """Prompt for an API key via plain input() so paste works in any terminal.
+
+    getpass.getpass() can hang or drop pasted content depending on terminal
+    mode (bracketed paste, kitty/wezterm). Plain input() reads the whole
+    line including pastes. This matches _enter_api_key() in
+    wiki_cli/ai/cli.py which also uses input() for the same reason.
+    """
+    return input("  api key: ").strip()
 
 
 def _prompt_new_profile() -> tuple[str, str, str]:
