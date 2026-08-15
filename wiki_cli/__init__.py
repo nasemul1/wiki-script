@@ -4,7 +4,7 @@ from wiki_cli.client import WikiJSClient
 from wiki_cli.exceptions import WikiJSError
 from wiki_cli.models import Page, PageResponse, PageHistory, PageVersion
 from wiki_cli.pages import PagesManager
-from wiki_cli.wikis import switch_wiki_flow
+from wiki_cli.wikis import get_active_client, switch_wiki_flow
 from wiki_cli.cli_main import main
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     "PageHistory",
     "PageVersion",
     "PagesManager",
+    "get_active_client",
     "switch_wiki_flow",
     "main",
 ]
