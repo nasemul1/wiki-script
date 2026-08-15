@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
-from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
 from wiki_cli.exceptions import WikiJSError
-
-load_dotenv()
 
 
 class WikiJSClient:
@@ -19,21 +15,20 @@ class WikiJSClient:
 
     Attributes:
         url: The GraphQL endpoint URL.
+        api_key: The API key used for Bearer auth.
         client: The underlying gql Client instance.
     """
 
-    def __init__(self, url: str | None = None, api_key: str | None = None) -> None:
-        self.url = url or os.getenv("WIKIJS_URL")
-        self.api_key = api_key or os.getenv("WIKIJS_API_KEY")
+    def __init__(self, url: str, api_key: str) -> None:
+        if not url or not url.strip():
+            raise WikiJSError("url is required")
+        if not (url.startswith("http://") or url.startswith("https://")):
+            raise WikiJSError("url must start with http:// or https://")
+        if not api_key or not api_key.strip():
+            raise WikiJSError("api_key is required")
 
-        if not self.url:
-            raise WikiJSError(
-                "WIKIJS_URL is not set. Provide it as an argument or in the environment."
-            )
-        if not self.api_key:
-            raise WikiJSError(
-                "WIKIJS_API_KEY is not set. Provide it as an argument or in the environment."
-            )
+        self.url = url
+        self.api_key = api_key
 
         transport = RequestsHTTPTransport(
             url=self.url,
@@ -51,14 +46,7 @@ class WikiJSClient:
         operation_name: str | None = None,
         upload_files: bool = False,
     ) -> dict[str, Any]:
-        """Execute a GraphQL operation against the Wiki.js API.
-
-        Returns:
-            The 'data' dict from the GraphQL response.
-
-        Raises:
-            WikiJSError: If the transport fails or the response contains errors.
-        """
+        """Execute a GraphQL operation against the Wiki.js API."""
         document = gql(query)
 
         if variable_values:
