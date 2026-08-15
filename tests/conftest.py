@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from wiki_cli import wikis
 from wiki_cli.models import Page, PageResponse
 from wiki_cli.pages import PagesManager
 
@@ -35,3 +36,12 @@ def sample_page_response(sample_page):
         message="Page created successfully",
         page=sample_page,
     )
+
+
+@pytest.fixture
+def tmp_wiki_config(tmp_path, monkeypatch):
+    f1 = tmp_path / "wikis.json"
+    f2 = tmp_path / "active_wiki.txt"
+    monkeypatch.setattr(wikis, "WIKIS_FILE", f1)
+    monkeypatch.setattr(wikis, "ACTIVE_FILE", f2)
+    return f1, f2
