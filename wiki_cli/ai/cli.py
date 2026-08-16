@@ -16,7 +16,7 @@ import threading
 import time
 from pathlib import Path
 
-from wiki_cli import WikiJSError
+from wiki_cli import WikiJSError, wikis
 from wiki_cli.ai.agent import WikiAgent
 from wiki_cli.ai.config import (
     AIConfig,
@@ -29,8 +29,11 @@ from wiki_cli.ai.config import (
 )
 from wiki_cli.wikis import (
     get_active_client,
+    get_active_wiki_name,
+    get_wiki,
     list_wikis,
     remove_wiki,
+    set_active_wiki,
     switch_wiki_flow,
 )
 from wiki_cli.pages import PagesManager
@@ -323,7 +326,7 @@ def _cmd_help() -> None:
     {C}/models{R}         switch model
     {C}/switch-wiki{R}    switch active wiki (interactive, or /switch-wiki <name> or --new)
     {C}/wikis{R}          list saved wikis
-    {C}/remove-wiki{R}    remove a wiki profile (/remove-wiki [name])
+    {C}/remove-wiki{R}    remove a wiki profile (asks to confirm)
     {C}/remove-key{R}     remove saved api key
     {C}/help{R}           show this help
     {C}exit{R}            quit
@@ -360,18 +363,36 @@ def _cmd_wikis() -> None:
 
 
 def _cmd_remove_wiki(agent: WikiAgent, arg: str) -> None:
-    from wiki_cli.wikis import get_active_wiki_name, set_active_wiki
-
     target = arg.strip() or get_active_wiki_name()
     if not target:
         print(f"  {Y}no wiki specified and no active wiki{R}\n")
         return
-    remove_wiki(target)
+
+    entry = wikis.get_wiki(target)
+    if not entry:
+        print(f"  {Y}wiki '{target}' not found{R}\n")
+        return
+
+    ans = input(f"  remove '{target}' ({entry['url']})? [y/n]: ").strip().lower()
+    if ans not in ("y", "yes"):
+        print(f"  {D}cancelled{R}\n")
+        return
+
+    wikis.remove_wiki(target)
+
     if get_active_wiki_name() == target:
         set_active_wiki(None)
         agent.wiki_client = None
         agent.pages = None
-    print(f"  {G}removed '{target}'{R}\n")
+        remaining = wikis.list_wikis()
+        if remaining:
+            new_client = switch_wiki_flow()
+            agent.wiki_client = new_client
+            agent.pages = PagesManager(new_client)
+        else:
+            print(f"  {Y}no saved wikis. /switch-wiki to add one.{R}\n")
+
+    print(f"  {G}removed → {target}{R}\n")
 
 
 # ── Main ────────────────────────────────────────────────────────────
