@@ -544,24 +544,24 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
     selected = 0
     n = len(sessions)
 
-    def render_row(i: int) -> str:
+    def render_row(i: int, marker: str) -> str:
+        """Format row at index i. marker must be passed explicitly so
+        rewriting the OLD row clears its '>' (pass ' ') and the NEW row
+        gets the selection marker (pass '>')."""
         s = sessions[i]
-        marker = ">" if i == selected else " "
         rel = _format_relative(s["updated_at"])
         return f"  {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}"
 
-    # Save cursor state. Tell terminal:
-    # - Use normal (not application) cursor keys — so we get CSI sequences
-    # - Hide cursor — so any caret drift during raw mode is invisible
+    # Tell terminal: use normal cursor keys + hide cursor.
     sys.stdout.write("\x1b[?1l")    # normal cursor keys
     sys.stdout.write("\x1b[?25l")   # hide cursor
     sys.stdout.flush()
 
-    # Print the list once. Cursor ends up on the last line.
+    # Print the list once. Cursor ends on the line AFTER the last row.
     print()
     print(f"  {B}Select a session (up/down + Enter, Esc to cancel):{R}")
     for i in range(n):
-        print(render_row(i))
+        print(render_row(i, ">" if i == selected else " "))
     sys.stdout.flush()
 
     fd = sys.stdin.fileno()
@@ -581,25 +581,32 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
                 elif seq == "[B":
                     new = min(n - 1, selected + 1)
                 else:
-                    # Bare escape or unknown sequence — cancel
                     sys.stdout.write("\r\n")
                     sys.stdout.flush()
                     return None
                 if new == selected:
                     continue
-                # Move cursor to current row (rows below it = n - 1 - selected)
-                rows_below_current = n - 1 - selected
-                if rows_below_current > 0:
-                    sys.stdout.write(f"\x1b[{rows_below_current}A")
-                sys.stdout.write("\r")
-                sys.stdout.write(render_row(selected) + "\x1b[K")
+                # After the initial render, cursor is on the line AFTER the
+                # last printed row. To reach the row at index i, move up
+                # (n - i) lines — that's the number of rows from the cursor
+                # position to the target row, not the number of rows below
+                # the current selection.
+                old_selected = selected
                 selected = new
-                # Move cursor to new row (rows below new selection)
-                rows_below_new = n - 1 - selected
-                if rows_below_new > 0:
-                    sys.stdout.write(f"\x1b[{rows_below_new}B")
+
+                # Rewrite OLD row (no marker) at its position
+                rows_above_old = n - old_selected
+                if rows_above_old > 0:
+                    sys.stdout.write(f"\x1b[{rows_above_old}A")
                 sys.stdout.write("\r")
-                sys.stdout.write(render_row(selected) + "\x1b[K")
+                sys.stdout.write(render_row(old_selected, " ") + "\x1b[K")
+
+                # Move to NEW row (rows below the NEW selection)
+                rows_above_new = n - selected
+                if rows_above_new > 0:
+                    sys.stdout.write(f"\x1b[{rows_above_new}B")
+                sys.stdout.write("\r")
+                sys.stdout.write(render_row(selected, ">") + "\x1b[K")
                 sys.stdout.flush()
             elif ch in ("\x03", "\x04"):
                 sys.stdout.write("\r\n")
