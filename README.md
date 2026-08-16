@@ -35,7 +35,7 @@ Wiki.js credentials are managed through named profiles — no `.env` required.
 - `~/.config/wiki-cli/active_wiki.txt` — currently active profile (mode `0600`)
 
 **Switching wikis:**
-- From the AI assistant: `/switch-wiki` (interactive), `/switch-wiki <name>` (jump), `/switch-wiki --new` (force create)
+- From the AI assistant: `/switch-wiki` (interactive), `/switch-wiki <name>` (jump), `/switch-wiki --new` (force create), `/add-wiki` (force create + auto-switch)
 - From the main menu: option `17. Manage Wikis` (submenu with switch / add / list / remove)
 - List profiles: `/wikis` or main menu option `17 → 3`
 - Remove a profile: `/remove-wiki [name]` or main menu option `17 → 4` (both ask to confirm)
@@ -151,6 +151,7 @@ Once configured, use natural language:
 
 | Command | Description |
 |---------|-------------|
+| `/add-wiki` | Add a new wiki profile (auto-switches + clears history) |
 | `/switch-wiki` | Switch active wiki (interactive / `<name>` / `--new`) |
 | `/wikis` | List saved wiki profiles |
 | `/remove-wiki` | Remove a wiki profile (asks to confirm) |
