@@ -196,6 +196,9 @@ $ wiki-ai
 | `/wikis` | List all saved wiki profiles with the active one marked. |
 | `/remove-wiki [name]` | Remove a profile (asks to confirm). Defaults to the active profile. |
 | `/clear` | Clear conversation history. |
+| `/sessions` | List all saved wiki sessions with message count and last activity. |
+| `/use` | Hot-swap sessions with an interactive arrow-key picker. |
+| `/use <name>` | Jump directly to a named session without the picker. |
 | `/help` | Show available commands. |
 | `exit` | Quit the AI assistant. |
 
@@ -204,6 +207,14 @@ $ wiki-ai
 Conversations persist per wiki profile. When you reopen `wiki-ai`, the previous session is restored automatically with a banner showing message count and last activity. Use `/clear` to wipe the current wiki's session. Sessions live at `~/.config/wiki-cli/sessions/<wiki-name>.json` (mode `0600`).
 
 The AI assistant caps context at 100,000 tokens. When cumulative messages cross 80% of that limit, a one-time warning prints and older messages get trimmed.
+
+### Session browsing
+
+Use `/sessions` to list all saved wiki sessions (message count + last activity). Use `/use` to hot-swap between sessions with an interactive arrow-key picker, or `/use <name>` to jump directly. Swapping saves the outgoing session and loads the incoming one.
+
+### Arrow-key input
+
+All interactive prompts in `wiki-ai` and the wiki profile manager now support arrow-key cursor movement (Left/Right), history recall (Up/Down), and Home/End navigation. Works on POSIX terminals (Linux, macOS). Falls back to plain input on Windows or piped stdin.
 
 ### LLM providers
 
