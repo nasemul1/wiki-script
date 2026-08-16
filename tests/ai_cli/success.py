@@ -377,3 +377,130 @@ def test_add_wiki_saves_outgoing_session(tmp_wiki_config, tmp_sessions_dir):
     assert any(m["content"] == "detailed answer" for m in saved["messages"])
     assert agent.wiki_name == "newone"
     assert not has_session("newone")
+
+
+def test_ai_sessions_lists_saved(capsys, tmp_wiki_config, tmp_sessions_dir):
+    """`/sessions` lists all saved sessions."""
+    from wiki_cli.ai.cli import ai_mode
+    from wiki_cli.ai.config import AIConfig
+    from wiki_cli.ai.sessions import save_session
+
+    save_session("work", [{"role": "user", "content": "x"}])
+    save_session("home", [{"role": "user", "content": "y"}, {"role": "user", "content": "z"}])
+
+    fake = MagicMock()
+    fake.url = "https://w.com/graphql"
+    cfg = AIConfig(provider="openrouter", api_key="x", model="m", base_url="")
+
+    with patch(INPUT_PATCH, side_effect=iter(["/sessions", "exit"])):
+        with patch("wiki_cli.ai.cli.get_active_client", return_value=fake):
+            with patch("wiki_cli.ai.cli._load_last_config", return_value=None):
+                with patch("wiki_cli.ai.cli.get_saved_key", return_value=""):
+                    with patch("wiki_cli.ai.cli._build_config", return_value=cfg):
+                        with patch("wiki_cli.ai.cli.WikiAgent") as mock_agent_cls:
+                            mock_agent = MagicMock()
+                            mock_agent.wiki_name = "work"
+                            mock_agent_cls.return_value = mock_agent
+                            ai_mode()
+    out = capsys.readouterr().out
+    assert "work" in out
+    assert "home" in out
+
+
+def test_ai_use_jumps_to_named_session(capsys, tmp_wiki_config, tmp_sessions_dir):
+    """`/use <name>` hot-swaps to that wiki's session."""
+    from wiki_cli.ai.cli import ai_mode
+    from wiki_cli.ai.config import AIConfig
+    from wiki_cli.ai.sessions import save_session
+    from wiki_cli.wikis import set_active_wiki
+
+    save_session("home", [{"role": "user", "content": "home msg"}])
+    save_session("work", [{"role": "user", "content": "x"}])
+    set_active_wiki("work")
+
+    fake = MagicMock()
+    fake.url = "https://w.com/graphql"
+    cfg = AIConfig(provider="openrouter", api_key="x", model="m", base_url="")
+
+    with patch(INPUT_PATCH, side_effect=iter(["/use home", "exit"])):
+        with patch("wiki_cli.ai.cli.get_active_client", return_value=fake):
+            with patch("wiki_cli.ai.cli._load_last_config", return_value=None):
+                with patch("wiki_cli.ai.cli.get_saved_key", return_value=""):
+                    with patch("wiki_cli.ai.cli._build_config", return_value=cfg):
+                        with patch("wiki_cli.ai.cli.WikiAgent") as mock_agent_cls:
+                            mock_agent = MagicMock()
+                            mock_agent.wiki_name = "work"
+                            mock_agent.messages = [{"role": "system", "content": "s"}]
+                            mock_agent_cls.return_value = mock_agent
+                            ai_mode()
+    assert mock_agent.wiki_name == "home"
+
+
+def test_ai_use_with_no_arg_calls_picker(capsys, tmp_wiki_config, tmp_sessions_dir):
+    """`/use` (no arg) calls _pick_session."""
+    from wiki_cli.ai.cli import ai_mode
+    from wiki_cli.ai.config import AIConfig
+
+    fake = MagicMock()
+    fake.url = "https://w.com/graphql"
+    cfg = AIConfig(provider="openrouter", api_key="x", model="m", base_url="")
+
+    with patch(INPUT_PATCH, side_effect=iter(["/use", "exit"])):
+        with patch("wiki_cli.ai.cli.get_active_client", return_value=fake):
+            with patch("wiki_cli.ai.cli._load_last_config", return_value=None):
+                with patch("wiki_cli.ai.cli.get_saved_key", return_value=""):
+                    with patch("wiki_cli.ai.cli._build_config", return_value=cfg):
+                        with patch("wiki_cli.ai.cli.WikiAgent") as mock_agent_cls:
+                            mock_agent = MagicMock()
+                            mock_agent.wiki_name = "work"
+                            mock_agent_cls.return_value = mock_agent
+                            with patch(
+                                "wiki_cli.ai.cli._pick_session", return_value="home"
+                            ) as mock_pick:
+                                ai_mode()
+    mock_pick.assert_called_once_with("work")
+
+
+def test_ai_use_unknown_session_error(capsys, tmp_wiki_config, tmp_sessions_dir):
+    """`/use ghost` prints error, no state change."""
+    from wiki_cli.ai.cli import ai_mode
+    from wiki_cli.ai.config import AIConfig
+
+    fake = MagicMock()
+    fake.url = "https://w.com/graphql"
+    cfg = AIConfig(provider="openrouter", api_key="x", model="m", base_url="")
+
+    with patch(INPUT_PATCH, side_effect=iter(["/use ghost", "exit"])):
+        with patch("wiki_cli.ai.cli.get_active_client", return_value=fake):
+            with patch("wiki_cli.ai.cli._load_last_config", return_value=None):
+                with patch("wiki_cli.ai.cli.get_saved_key", return_value=""):
+                    with patch("wiki_cli.ai.cli._build_config", return_value=cfg):
+                        with patch("wiki_cli.ai.cli.WikiAgent") as mock_agent_cls:
+                            mock_agent = MagicMock()
+                            mock_agent.wiki_name = "work"
+                            mock_agent.messages = [{"role": "system", "content": "s"}]
+                            mock_agent_cls.return_value = mock_agent
+                            ai_mode()
+    out = capsys.readouterr().out
+    assert "not found" in out.lower()
+    assert mock_agent.wiki_name == "work"
+
+
+def test_ai_swap_session_saves_outgoing(tmp_wiki_config, tmp_sessions_dir):
+    """_swap_session saves outgoing before loading incoming."""
+    from wiki_cli.ai.cli import _swap_session
+    from wiki_cli.ai.sessions import load_session, save_session
+
+    agent = MagicMock()
+    agent.wiki_name = "work"
+    agent.messages = [{"role": "user", "content": "work content"}]
+    agent._warned_at_80pct = True
+
+    save_session("home", [{"role": "user", "content": "home prior"}])
+
+    _swap_session(agent, "home")
+
+    saved_work = load_session("work")
+    assert saved_work["messages"] == agent.messages
+    assert agent.messages[0]["content"] == "home prior"
+    assert agent._warned_at_80pct is False

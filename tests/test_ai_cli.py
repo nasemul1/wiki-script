@@ -106,3 +106,30 @@ def test_switch_wiki_loads_incoming_session(capsys, tmp_wiki_config, tmp_session
 
 def test_add_wiki_saves_outgoing_session(tmp_wiki_config, tmp_sessions_dir):
     _add_save_out(tmp_wiki_config, tmp_sessions_dir)
+
+
+from ai_cli.success import test_ai_sessions_lists_saved as _sessions_list
+from ai_cli.success import test_ai_use_jumps_to_named_session as _use_named
+from ai_cli.success import test_ai_use_with_no_arg_calls_picker as _use_picker
+from ai_cli.success import test_ai_use_unknown_session_error as _use_unknown
+from ai_cli.success import test_ai_swap_session_saves_outgoing as _swap
+
+
+def test_ai_sessions_lists_saved(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _sessions_list(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_ai_use_jumps_to_named_session(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _use_named(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_ai_use_with_no_arg_calls_picker(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _use_picker(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_ai_use_unknown_session_error(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _use_unknown(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_ai_swap_session_saves_outgoing(tmp_wiki_config, tmp_sessions_dir):
+    _swap(tmp_wiki_config, tmp_sessions_dir)

@@ -39,6 +39,7 @@ from wiki_cli.wikis import (
 from wiki_cli.ai.sessions import (
     delete_session,
     has_session,
+    list_sessions,
     load_session,
     save_session,
 )
@@ -461,6 +462,118 @@ def _cmd_add_wiki(agent: WikiAgent) -> None:
     print(f"  {G}saved → active: {name}{R}\n")
 
 
+def _cmd_sessions(agent: WikiAgent) -> None:
+    """List all saved wiki sessions."""
+    sessions = list_sessions()
+    if not sessions:
+        print(f"  {D}no saved sessions{R}\n")
+        return
+
+    print(f"  {D}saved sessions:{R}")
+    for s in sessions:
+        marker = f" {G}*{R}" if s["wiki"] == agent.wiki_name else "  "
+        rel = _format_relative(s["updated_at"])
+        print(
+            f"  {marker} {B}{s['wiki']:<16}{R} {s['message_count']:>4} msgs, last: {rel}"
+        )
+    print()
+
+
+def _swap_session(agent: WikiAgent, target_wiki: str) -> None:
+    """Hot-swap agent to use target_wiki's session. Saves outgoing first."""
+    outgoing = agent.wiki_name
+    if outgoing and outgoing != target_wiki:
+        try:
+            save_session(outgoing, agent.messages)
+        except Exception:
+            pass
+
+    agent.wiki_name = target_wiki
+    session = load_session(target_wiki)
+    if session:
+        agent.messages = session["messages"]
+        agent._warned_at_80pct = False
+        if outgoing and outgoing != target_wiki:
+            try:
+                save_session(outgoing, agent.messages)
+            except Exception:
+                pass
+        print(
+            f"  {G}switched → {target_wiki} ({len(session['messages'])} messages){R}\n"
+        )
+    else:
+        agent.clear_history()
+        print(f"  {D}started fresh for {target_wiki}{R}\n")
+
+
+def _pick_session(current_wiki: str | None = None) -> str | None:
+    """Interactive picker. Arrow keys + Enter. Returns selected wiki name or None."""
+    sessions = list_sessions()
+    if not sessions:
+        return None
+
+    def sort_key(s):
+        is_current = s["wiki"] != current_wiki
+        return (is_current, s["updated_at"])
+
+    sessions = sorted(sessions, key=sort_key, reverse=False)
+
+    if not sys.stdin.isatty():
+        return None
+
+    import termios
+    import tty
+
+    selected = 0
+
+    def render() -> None:
+        sys.stdout.write("\x1b[?1049h")
+        sys.stdout.write("\x1b[H")
+        sys.stdout.write(f"  {B}Select a session (up/down + Enter, Esc to cancel){R}\n\n")
+        for i, s in enumerate(sessions):
+            marker = ">" if i == selected else " "
+            rel = _format_relative(s["updated_at"])
+            sys.stdout.write(
+                f"  {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}\n"
+            )
+        sys.stdout.flush()
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        render()
+        while True:
+            ch = sys.stdin.read(1)
+            if ch in ("\r", "\n"):
+                sys.stdout.write("\x1b[?1049l")
+                sys.stdout.flush()
+                return sessions[selected]["wiki"]
+            elif ch == "\x1b":
+                seq = sys.stdin.read(2)
+                if seq == "[A":
+                    selected = max(0, selected - 1)
+                elif seq == "[B":
+                    selected = min(len(sessions) - 1, selected + 1)
+                else:
+                    sys.stdout.write("\x1b[?1049l")
+                    sys.stdout.flush()
+                    return None
+                render()
+            elif ch == "\x03":
+                sys.stdout.write("\x1b[?1049l")
+                sys.stdout.flush()
+                return None
+            elif ch == "\x04":
+                sys.stdout.write("\x1b[?1049l")
+                sys.stdout.flush()
+                return None
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        sys.stdout.write("\x1b[?1049l")
+        sys.stdout.flush()
+
+
 # ── Main ────────────────────────────────────────────────────────────
 
 def _format_relative(timestamp: str) -> str:
@@ -583,6 +696,28 @@ def ai_mode() -> None:
             except WikiJSError as exc:
                 print(f"  {Y}{exc}{R}\n")
             continue
+        if prompt == "/sessions":
+            _cmd_sessions(agent)
+            continue
+
+        if prompt == "/use":
+            picked = _pick_session(agent.wiki_name)
+            if picked:
+                _swap_session(agent, picked)
+            continue
+
+        if prompt.startswith("/use "):
+            target = prompt[len("/use "):].strip()
+            if not target:
+                picked = _pick_session(agent.wiki_name)
+                if picked:
+                    _swap_session(agent, picked)
+            elif has_session(target):
+                _swap_session(agent, target)
+            else:
+                print(f"  {Y}session '{target}' not found{R}\n")
+            continue
+
         if prompt == "/wikis":
             _cmd_wikis()
             continue
