@@ -199,6 +199,12 @@ $ wiki-ai
 | `/help` | Show available commands. |
 | `exit` | Quit the AI assistant. |
 
+### Session memory
+
+Conversations persist per wiki profile. When you reopen `wiki-ai`, the previous session is restored automatically with a banner showing message count and last activity. Use `/clear` to wipe the current wiki's session. Sessions live at `~/.config/wiki-cli/sessions/<wiki-name>.json` (mode `0600`).
+
+The AI assistant caps context at 100,000 tokens. When cumulative messages cross 80% of that limit, a one-time warning prints and older messages get trimmed.
+
 ### LLM providers
 
 The AI assistant works with any OpenAI-compatible API. On first run you pick a provider and enter an API key:
