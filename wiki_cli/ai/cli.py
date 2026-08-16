@@ -480,7 +480,10 @@ def ai_mode() -> None:
             _cmd_remove_key(agent)
             continue
         if prompt == "/add-wiki":
-            _cmd_add_wiki(agent)
+            try:
+                _cmd_add_wiki(agent)
+            except WikiJSError as exc:
+                print(f"  {Y}{exc}{R}\n")
             continue
         if prompt.startswith("/switch-wiki"):
             arg = prompt[len("/switch-wiki"):].strip()

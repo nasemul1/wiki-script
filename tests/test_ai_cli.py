@@ -38,6 +38,9 @@ def test_yes(capsys, tmp_wiki_config):
 from ai_cli.success import test_ai_add_wiki_saves_profile as _add_save
 from ai_cli.success import test_ai_add_wiki_clears_history as _add_clear
 from ai_cli.success import test_ai_add_wiki_duplicate_name_no_change as _add_dup
+from ai_cli.success import (
+    test_ai_add_wiki_dispatch_catches_duplicate as _add_dispatch,
+)
 
 
 def test_ai_add_wiki_saves_profile(capsys, tmp_wiki_config):
@@ -50,3 +53,7 @@ def test_ai_add_wiki_clears_history(capsys, tmp_wiki_config):
 
 def test_ai_add_wiki_duplicate_name_no_change(capsys, tmp_wiki_config):
     _add_dup(capsys, tmp_wiki_config)
+
+
+def test_ai_add_wiki_dispatch_catches_duplicate(capsys, tmp_wiki_config):
+    _add_dispatch(capsys, tmp_wiki_config)

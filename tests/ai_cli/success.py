@@ -130,3 +130,34 @@ def test_ai_add_wiki_duplicate_name_no_change(capsys, tmp_wiki_config):
     assert wikis.get_active_wiki_name() is None
     assert agent.wiki_client is original_client
     print(f"\n  [AI] /add-wiki duplicate name raises and preserves state")
+
+
+def test_ai_add_wiki_dispatch_catches_duplicate(capsys, tmp_wiki_config):
+    """Dispatch loop must catch WikiJSError from /add-wiki and continue."""
+    from wiki_cli.ai.cli import ai_mode
+    from wiki_cli.ai.config import AIConfig
+
+    wikis.save_wiki("existing", "https://e.com/graphql", "k1")
+
+    fake = MagicMock()
+    fake.url = "https://e.com/graphql"
+    cfg = AIConfig(provider="openrouter", api_key="x", model="m", base_url="")
+
+    inputs = iter([
+        "/add-wiki",
+        "existing",
+        "https://other.com/graphql",
+        "k2",
+        "exit",
+    ])
+    with patch(INPUT_PATCH, side_effect=inputs):
+        with patch("wiki_cli.ai.cli.get_active_client", return_value=fake):
+            with patch("wiki_cli.ai.cli._load_last_config", return_value=None):
+                with patch("wiki_cli.ai.cli.get_saved_key", return_value=""):
+                    with patch("wiki_cli.ai.cli._build_config", return_value=cfg):
+                        with patch("wiki_cli.ai.cli.WikiAgent"):
+                            ai_mode()
+    out = capsys.readouterr().out
+    assert "already exists" in out
+    assert "wiki-ai" in out
+    print(f"\n  [AI] /add-wiki dispatch catches WikiJSError and continues")
