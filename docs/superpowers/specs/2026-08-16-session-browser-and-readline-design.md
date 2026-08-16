@@ -209,8 +209,8 @@ def test_ai_sessions_lists_saved(capsys, tmp_wiki_config, tmp_sessions_dir):
     # Run /sessions dispatch, assert output mentions "work" + "messages"
 
 def test_ai_use_jumps_to_named_session(capsys, tmp_wiki_config, tmp_sessions_dir):
-    save_session("work", [{"role": "user", "content": "x"}])
-    # /use home  → should error (no home session)
+    save_session("home", [{"role": "user", "content": "home msg"}])
+    # /use home → loads home session, switches agent to home
 
 def test_ai_use_with_existing_session_loads_messages(...):
     # Save wiki A session, pretend agent is on A, /use B → loads B's messages
