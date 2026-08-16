@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add `/sessions` (list) and `/use [name]` (hot-swap) slash commands to `wiki-ai`, with an interactive arrow-key picker. Replace plain `input()` calls in the most-used interactive flows with an arrow-key-capable readline.
+**Goal:** Add `/sessions` (list) and `/use [name]` (hot-swap with arrow-key picker) slash commands to `wiki-ai`. Replace plain `input()` calls in `wiki_cli/ai/cli.py` and `wiki_cli/wikis.py` with an arrow-key-capable readline.
 
-**Architecture:** New `wiki_cli/ai/readline.py` owns the ANSI readline (termios + tty for POSIX, fallback to plain input() on non-TTY). `wiki_cli/ai/sessions.py` gains `list_sessions()`. `wiki_cli/ai/cli.py` gains `_cmd_sessions`, `_pick_session`, `_swap_session` helpers + slash command dispatch. `wiki_cli/wikis.py` swaps `input()` → `input_with_history()` in `_prompt_new_profile`.
+**Architecture:** New `wiki_cli/ai/readline.py` owns ANSI readline (POSIX `termios` + `tty`, fallback to plain `input()` on non-TTY). `wiki_cli/ai/sessions.py` gains `list_sessions()`. `wiki_cli/ai/cli.py` gains `_cmd_sessions`, `_pick_session`, `_swap_session` helpers + slash command dispatch. `wiki_cli/wikis.py` swaps `input()` → `input_with_history()` in `_prompt_new_profile()`.
 
 **Tech Stack:** Python 3.10+, `termios`, `tty`, `pytest` with `monkeypatch`.
 
@@ -128,7 +128,7 @@ Expected: all pass (existing 11 + 6 new = 17).
 - [ ] **Step 1.5: Run full suite — verify no regressions**
 
 Run: `uv run pytest tests/ --ignore=tests/test_jira_client.py --ignore=tests/test_jira_config.py -q 2>&1 | tail -5`
-Expected: 251 + 6 = 257 pass.
+Expected: 257 + 6 = 263 pass.
 
 - [ ] **Step 1.6: Commit**
 
@@ -189,10 +189,8 @@ def test_input_with_history_returns_typed_text(monkeypatch):
     monkeypatch.setattr(sys.stdin, "isatty", _fake_stdin_isatty(True))
     monkeypatch.setattr(sys.stdin, "fileno", lambda: 0)
 
-    # Simulate user typing "hi" + Enter.
     chars = ["h", "i", "\r"]
     monkeypatch.setattr(sys.stdin, "read", lambda n=1: chars.pop(0) if chars else "")
-    # termios calls need mocking too.
     with patch("wiki_cli.ai.readline.termios") as mock_t, patch(
         "wiki_cli.ai.readline.tty"
     ) as mock_tty:
@@ -206,7 +204,6 @@ def test_input_with_history_handles_backspace(monkeypatch):
     """BS deletes char before cursor."""
     monkeypatch.setattr(sys.stdin, "isatty", _fake_stdin_isatty(True))
     monkeypatch.setattr(sys.stdin, "fileno", lambda: 0)
-    # type "ab" + backspace + "c" + enter = "ac"
     chars = ["a", "b", "\x7f", "c", "\r"]
     monkeypatch.setattr(sys.stdin, "read", lambda n=1: chars.pop(0) if chars else "")
     with patch("wiki_cli.ai.readline.termios"), patch("wiki_cli.ai.readline.tty"):
@@ -218,7 +215,6 @@ def test_input_with_history_arrow_left_right(monkeypatch):
     """Arrow keys don't change buffer, but cursor position moves."""
     monkeypatch.setattr(sys.stdin, "isatty", _fake_stdin_isatty(True))
     monkeypatch.setattr(sys.stdin, "fileno", lambda: 0)
-    # type "abc" + left + "X" + enter = "abXc"
     chars = ["a", "b", "c", "\x1b", "[", "D", "X", "\r"]
     monkeypatch.setattr(sys.stdin, "read", lambda n=1: chars.pop(0) if chars else "")
     with patch("wiki_cli.ai.readline.termios"), patch("wiki_cli.ai.readline.tty"):
@@ -230,12 +226,10 @@ def test_input_with_history_arrow_up_history(monkeypatch):
     """Up arrow retrieves previous history entry."""
     monkeypatch.setattr(sys.stdin, "isatty", _fake_stdin_isatty(True))
     monkeypatch.setattr(sys.stdin, "fileno", lambda: 0)
-    # Just press Enter on first prompt, no history yet.
     chars = ["\r"]
     monkeypatch.setattr(sys.stdin, "read", lambda n=1: chars.pop(0) if chars else "")
     with patch("wiki_cli.ai.readline.termios"), patch("wiki_cli.ai.readline.tty"):
         result = input_with_history("> ", history=["prev_line"])
-    # No up-arrow pressed, so result is empty (history not yet cycled).
     assert result == ""
 
 
@@ -300,15 +294,6 @@ Drop-in replacement for input() that supports:
 
 POSIX-only (uses termios + tty). On non-TTY (Windows, piped tests),
 falls back to plain input().
-
-ANSI codes used:
-    \\x1b[D / \\x1b[C  left/right
-    \\x1b[H / \\x1b[F  home/end
-    \\x1b[A / \\x1b[B  up/down (history)
-    \\x1b[3~          delete (forward delete)
-    \\x1b[K           clear to end of line
-    \\x1b[1m / \\x1b[0m bold on/off
-    \\x1b[?1049h / \\x1b[?1049l alternate screen buffer (not used by input_with_history)
 """
 
 from __future__ import annotations
@@ -328,7 +313,6 @@ def input_with_history(prompt: str, *, history: list[str] | None = None) -> str:
     if not sys.stdin.isatty():
         return _fallback(prompt)
 
-    # Imported lazily so non-POSIX platforms can still import the module.
     import termios
     import tty
 
@@ -347,10 +331,8 @@ def input_with_history(prompt: str, *, history: list[str] | None = None) -> str:
 
         def refresh() -> None:
             """Redraw the current line from cursor position."""
-            # Move cursor to start of input area, clear line, write prompt + buffer.
             sys.stdout.write(f"\r{prompt}\x1b[K")
             sys.stdout.write("".join(buf))
-            # Move cursor back to position
             if pos < len(buf):
                 sys.stdout.write(f"\x1b[{len(buf) - pos}D")
             sys.stdout.flush()
@@ -363,13 +345,13 @@ def input_with_history(prompt: str, *, history: list[str] | None = None) -> str:
                 break
             elif ch == "\x1b":
                 seq = sys.stdin.read(2)
-                if seq == "[A":  # up arrow
+                if seq == "[A":
                     if hist_idx > 0:
                         hist_idx -= 1
                         buf = list(hist[hist_idx])
                         pos = len(buf)
                         refresh()
-                elif seq == "[B":  # down arrow
+                elif seq == "[B":
                     if hist_idx < len(hist) - 1:
                         hist_idx += 1
                         buf = list(hist[hist_idx])
@@ -380,51 +362,48 @@ def input_with_history(prompt: str, *, history: list[str] | None = None) -> str:
                         buf = []
                         pos = 0
                         refresh()
-                elif seq == "[C":  # right arrow
+                elif seq == "[C":
                     if pos < len(buf):
                         sys.stdout.write("\x1b[C")
                         sys.stdout.flush()
                         pos += 1
-                elif seq == "[D":  # left arrow
+                elif seq == "[D":
                     if pos > 0:
                         sys.stdout.write("\x1b[D")
                         sys.stdout.flush()
                         pos -= 1
-                elif seq == "[H":  # home
+                elif seq == "[H":
                     while pos > 0:
                         sys.stdout.write("\x1b[D")
                         pos -= 1
                     sys.stdout.flush()
-                elif seq == "[F":  # end
+                elif seq == "[F":
                     while pos < len(buf):
                         sys.stdout.write("\x1b[C")
                         pos += 1
                     sys.stdout.flush()
-                elif seq == "[3":  # delete (3-char seq \x1b[3~)
+                elif seq == "[3":
                     extra = sys.stdin.read(1)
                     if extra == "~" and pos < len(buf):
                         del buf[pos]
                         refresh()
-            elif ch in ("\x7f", "\x08"):  # backspace
+            elif ch in ("\x7f", "\x08"):
                 if pos > 0:
                     del buf[pos - 1]
                     pos -= 1
                     refresh()
-            elif ch == "\x03":  # Ctrl-C
+            elif ch == "\x03":
                 raise KeyboardInterrupt
-            elif ch == "\x04":  # Ctrl-D
+            elif ch == "\x04":
                 if not buf:
                     raise EOFError
-                # Else: ignore (some terminals use Ctrl-D to signal end)
             elif ch.isprintable() or ch == " ":
                 buf.insert(pos, ch)
                 pos += 1
-                # Redraw from cursor
                 sys.stdout.write("".join(buf[pos - 1:]))
                 if pos < len(buf):
                     sys.stdout.write("\x1b[K")
                 sys.stdout.flush()
-            # Ignore other control chars
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -440,7 +419,7 @@ Expected: 8/8 pass.
 - [ ] **Step 2.5: Run full suite — verify no regressions**
 
 Run: `uv run pytest tests/ --ignore=tests/test_jira_client.py --ignore=tests/test_jira_config.py -q 2>&1 | tail -5`
-Expected: 257 + 8 = 265 pass.
+Expected: 263 + 8 = 271 pass.
 
 - [ ] **Step 2.6: Commit**
 
@@ -496,14 +475,14 @@ def test_ai_sessions_lists_saved(capsys, tmp_wiki_config, tmp_sessions_dir):
     out = capsys.readouterr().out
     assert "work" in out
     assert "home" in out
-    assert "1 msgs" in out or "2 msgs" in out
 
 
 def test_ai_use_jumps_to_named_session(capsys, tmp_wiki_config, tmp_sessions_dir):
     """`/use <name>` hot-swaps to that wiki's session."""
-    from wiki_cli.ai.cli import ai_mode, _swap_session
+    from wiki_cli.ai.cli import ai_mode
     from wiki_cli.ai.config import AIConfig
-    from wiki_cli.ai.sessions import has_session, load_session, save_session
+    from wiki_cli.ai.sessions import save_session
+    from wiki_cli.wikis import set_active_wiki
 
     save_session("home", [{"role": "user", "content": "home msg"}])
     save_session("work", [{"role": "user", "content": "x"}])
@@ -524,7 +503,6 @@ def test_ai_use_jumps_to_named_session(capsys, tmp_wiki_config, tmp_sessions_dir
                             mock_agent.messages = [{"role": "system", "content": "s"}]
                             mock_agent_cls.return_value = mock_agent
                             ai_mode()
-    # After /use home, agent.wiki_name should be "home" and messages should reflect home session
     assert mock_agent.wiki_name == "home"
 
 
@@ -575,14 +553,13 @@ def test_ai_use_unknown_session_error(capsys, tmp_wiki_config, tmp_sessions_dir)
                             ai_mode()
     out = capsys.readouterr().out
     assert "not found" in out.lower()
-    # wiki_name unchanged
     assert mock_agent.wiki_name == "work"
 
 
-def test_ai_swap_session_saves_outgoing(tmp_sessions_dir, tmp_wiki_config):
+def test_ai_swap_session_saves_outgoing(tmp_wiki_config, tmp_sessions_dir):
     """_swap_session saves outgoing before loading incoming."""
     from wiki_cli.ai.cli import _swap_session
-    from wiki_cli.ai.sessions import has_session, load_session, save_session
+    from wiki_cli.ai.sessions import load_session, save_session
 
     agent = MagicMock()
     agent.wiki_name = "work"
@@ -593,10 +570,8 @@ def test_ai_swap_session_saves_outgoing(tmp_sessions_dir, tmp_wiki_config):
 
     _swap_session(agent, "home")
 
-    # work's session was saved
     saved_work = load_session("work")
     assert saved_work["messages"] == agent.messages
-    # home's session was loaded
     assert agent.messages[0]["content"] == "home prior"
     assert agent._warned_at_80pct is False
 ```
@@ -636,9 +611,9 @@ def test_ai_swap_session_saves_outgoing(capsys, tmp_wiki_config, tmp_sessions_di
 Run: `uv run pytest tests/test_ai_cli.py -v -k "sessions or use or swap"`
 Expected: FAIL with `ImportError` for `_cmd_sessions` / `_pick_session` / `_swap_session`.
 
-- [ ] **Step 3.3: Implement `_cmd_sessions`, `_pick_session`, `_swap_session` in `wiki_cli/ai/cli.py`**
+- [ ] **Step 3.3: Implement helpers + dispatch in `wiki_cli/ai/cli.py`**
 
-**Edit 1** — Add `list_sessions` import. Find the existing `from wiki_cli.ai.sessions import (...)` block (around line 39-44). Add `list_sessions`:
+**Edit 1** — Add `list_sessions` import. Find the existing `from wiki_cli.ai.sessions import (...)` block and add `list_sessions`:
 
 ```python
 from wiki_cli.ai.sessions import (
@@ -650,7 +625,7 @@ from wiki_cli.ai.sessions import (
 )
 ```
 
-**Edit 2** — Add `_cmd_sessions` function. Find a good spot, e.g., after `_cmd_add_wiki` (around line 460):
+**Edit 2** — Add `_cmd_sessions`, `_pick_session`, `_swap_session` functions. Insert after `_cmd_add_wiki` (search for that function's end):
 
 ```python
 def _cmd_sessions(agent: WikiAgent) -> None:
@@ -692,25 +667,19 @@ def _swap_session(agent: WikiAgent, target_wiki: str) -> None:
 
 
 def _pick_session(current_wiki: str | None = None) -> str | None:
-    """Interactive picker. Arrow keys + Enter. Returns selected wiki name or None.
-
-    Uses ANSI alternate screen buffer + cursor positioning. POSIX-only
-    (uses termios). Falls back to None when stdin isn't a TTY (test/piped).
-    """
+    """Interactive picker. Arrow keys + Enter. Returns selected wiki name or None."""
     sessions = list_sessions()
     if not sessions:
         return None
 
-    # Sort: current wiki first (if any), then by recency.
     def sort_key(s):
         is_current = s["wiki"] != current_wiki
         return (is_current, s["updated_at"])
 
     sessions = sorted(sessions, key=sort_key, reverse=False)
 
-    # POSIX TTY check
     if not sys.stdin.isatty():
-        return None  # can't do interactive picker without TTY
+        return None
 
     import termios
     import tty
@@ -718,11 +687,11 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
     selected = 0
 
     def render() -> None:
-        sys.stdout.write("\x1b[?1049h")  # enter alt screen
-        sys.stdout.write("\x1b[H")  # cursor home
-        sys.stdout.write(f"  {B}Select a session (↑/↓ + Enter, Esc to cancel){R}\n\n")
+        sys.stdout.write("\x1b[?1049h")
+        sys.stdout.write("\x1b[H")
+        sys.stdout.write(f"  {B}Select a session (up/down + Enter, Esc to cancel){R}\n\n")
         for i, s in enumerate(sessions):
-            marker = "▶" if i == selected else " "
+            marker = ">" if i == selected else " "
             rel = _format_relative(s["updated_at"])
             sys.stdout.write(
                 f"  {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}\n"
@@ -737,26 +706,25 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
         while True:
             ch = sys.stdin.read(1)
             if ch in ("\r", "\n"):
-                sys.stdout.write("\x1b[?1049l")  # exit alt screen
+                sys.stdout.write("\x1b[?1049l")
                 sys.stdout.flush()
                 return sessions[selected]["wiki"]
             elif ch == "\x1b":
                 seq = sys.stdin.read(2)
-                if seq == "[A":  # up
+                if seq == "[A":
                     selected = max(0, selected - 1)
-                elif seq == "[B":  # down
+                elif seq == "[B":
                     selected = min(len(sessions) - 1, selected + 1)
                 else:
-                    # Plain Esc (no sequence after) or unrecognized
                     sys.stdout.write("\x1b[?1049l")
                     sys.stdout.flush()
                     return None
                 render()
-            elif ch == "\x03":  # Ctrl-C
+            elif ch == "\x03":
                 sys.stdout.write("\x1b[?1049l")
                 sys.stdout.flush()
                 return None
-            elif ch == "\x04":  # Ctrl-D
+            elif ch == "\x04":
                 sys.stdout.write("\x1b[?1049l")
                 sys.stdout.flush()
                 return None
@@ -766,7 +734,7 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
         sys.stdout.flush()
 ```
 
-**Edit 3** — Add `/sessions` + `/use` dispatch. Find the existing `/wikis` dispatch (around line 530). Add `/sessions` and `/use` handlers in the dispatch block:
+**Edit 3** — Add `/sessions` + `/use` dispatch. Find the existing `/wikis` dispatch block and add before it:
 
 ```python
         if prompt == "/sessions":
@@ -800,7 +768,7 @@ Expected: 5 pass.
 - [ ] **Step 3.5: Run full suite — verify no regressions**
 
 Run: `uv run pytest tests/ --ignore=tests/test_jira_client.py --ignore=tests/test_jira_config.py -q 2>&1 | tail -5`
-Expected: 265 + 5 = 270 pass.
+Expected: 271 + 5 = 276 pass.
 
 - [ ] **Step 3.6: Commit**
 
@@ -817,9 +785,9 @@ git commit -m "feat(ai): /sessions list + /use hot-swap with arrow-key picker"
 - Modify: `wiki_cli/wikis.py`
 - Modify: `wiki_cli/ai/cli.py`
 
-- [ ] **Step 4.1: Swap `input()` → `input_with_history()` in `_prompt_new_profile`**
+- [ ] **Step 4.1: Swap `input()` → `input_with_history()` in `_prompt_new_profile` and `_read_api_key`**
 
-Find the `_prompt_new_profile` function in `wiki_cli/wikis.py` (around line 127). Replace the three `input(...)` calls inside the `while True:` loops:
+Find the `_prompt_new_profile` function in `wiki_cli/wikis.py` (around line 127). Replace the three `input(...)` calls:
 
 ```python
         name = input("  name: ").strip()
@@ -832,8 +800,6 @@ Find the `_prompt_new_profile` function in `wiki_cli/wikis.py` (around line 127)
         name = input_with_history("  name: ").strip()
 ```
 
-And the URL prompt:
-
 ```python
         url = input("  url: ").strip()
 ```
@@ -844,13 +810,7 @@ And the URL prompt:
         url = input_with_history("  url: ").strip()
 ```
 
-And the api key prompt:
-
-```python
-        api_key = _read_api_key()
-```
-
-The `_read_api_key` function (around line 127) uses `input("  api key: ").strip()`. Replace:
+Update `_read_api_key` (around line 127):
 
 ```python
 def _read_api_key() -> str:
@@ -877,9 +837,9 @@ def _read_api_key() -> str:
         return input_with_history("  api key: ").strip()
 ```
 
-**Edit 2** — Swap `input()` → `input_with_history()` in `wiki_cli/ai/cli.py` REPL loop.
+- [ ] **Step 4.2: Swap `input()` → `input_with_history()` in `wiki_cli/ai/cli.py` REPL loop + provider picker**
 
-Find the REPL input read (around line 538-540 in current file):
+Find the REPL input read (search for `prompt = input(f"  {C}>{R} "`)):
 
 ```python
             prompt = input(f"  {C}>{R} ").strip()
@@ -892,7 +852,7 @@ Find the REPL input read (around line 538-540 in current file):
             prompt = input_with_history(f"  {C}>{R} ").strip()
 ```
 
-Also swap the input call inside `_pick_provider` (around line 126):
+Find the input calls inside `_pick_provider` (search for `choice = input(f"  {C}>{R} "`)):
 
 ```python
             choice = input(f"  {C}>{R} ").strip() or "1"
@@ -905,14 +865,14 @@ Also swap the input call inside `_pick_provider` (around line 126):
             choice = input_with_history(f"  {C}>{R} ").strip() or "1"
 ```
 
-(Same pattern for the other `_pick_*` calls in `cli.py` and `_enter_api_key` — replace each `input(...)` with `input_with_history(...)`. There are ~6 calls in `cli.py` total. Lazy-import inside each function is fine; the import is cached after first call.)
+Apply the same swap to the other ~6 `input(...)` calls in `cli.py` (model picker, api key prompt, etc.). Each gets a lazy `from wiki_cli.ai.readline import input_with_history` line.
 
-- [ ] **Step 4.2: Run tests — verify no regressions**
+- [ ] **Step 4.3: Run tests — verify no regressions**
 
 Run: `uv run pytest tests/ --ignore=tests/test_jira_client.py --ignore=tests/test_jira_config.py -q 2>&1 | tail -5`
-Expected: 270 pass (no test changes, just refactor).
+Expected: 276 pass.
 
-- [ ] **Step 4.3: Commit**
+- [ ] **Step 4.4: Commit**
 
 ```bash
 git add wiki_cli/wikis.py wiki_cli/ai/cli.py
@@ -926,9 +886,9 @@ git commit -m "refactor(ai): use input_with_history in interactive prompts"
 **Files:**
 - Modify: `README.md`
 
-- [ ] **Step 5.1: Update README — add /sessions + /use + readline section**
+- [ ] **Step 5.1: Update README — add /sessions + /use + arrow-key input**
 
-Find the existing "Session memory" subsection in `README.md` (added in the prior session-memory plan). After that subsection, add:
+Find the existing "Session memory" subsection (added in the prior session-memory plan). After that subsection, add:
 
 ```markdown
 ### Browse and switch sessions
@@ -941,13 +901,13 @@ Use `/use` to switch between wikis mid-conversation without restarting. The curr
 
 ### Arrow-key input
 
-Prompts in `wiki-ai` and the wiki profile setup now support arrow-key cursor movement (Left/Right/End/Home), backspace, history (Up/Down), and Ctrl-C/Ctrl-D. Pastes and edits behave like a standard terminal.
+Prompts in `wiki-ai` and the wiki profile setup now support arrow-key cursor movement (Left/Right/Home/End), backspace, history (Up/Down), and Ctrl-C/Ctrl-D. Pastes and edits behave like a standard terminal.
 ```
 
 - [ ] **Step 5.2: Run full suite — verify no regressions**
 
 Run: `uv run pytest tests/ --ignore=tests/test_jira_client.py --ignore=tests/test_jira_config.py -q 2>&1 | tail -5`
-Expected: 270 pass (docs only).
+Expected: 276 pass (docs only).
 
 - [ ] **Step 5.3: Commit**
 
