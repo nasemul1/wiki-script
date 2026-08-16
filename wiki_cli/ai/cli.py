@@ -510,9 +510,14 @@ def _swap_session(agent: WikiAgent, target_wiki: str) -> None:
 def _pick_session(current_wiki: str | None = None) -> str | None:
     """Interactive picker. Arrow keys + Enter. Returns selected wiki name or None.
 
-    Uses ANSI clear-screen + cursor-home before each render. Works on any
-    terminal that supports basic VT100 escape sequences — no alt-screen
-    buffer required (avoids issues with terminals that don't support it).
+    Renders the list once via print() (which uses the platform's standard
+    newline), then on each Up/Down uses relative cursor movement
+    (\\x1b[N A/B) to overwrite just the affected rows. Uses \\x1b[K
+    (clear to end of line) to handle row width changes.
+
+    Avoids clear-screen and home-cursor escapes which can fail in
+    some terminals. Only uses basic VT100 primitives that are universally
+    supported.
     """
     sessions = list_sessions()
     if not sessions:
@@ -531,40 +536,65 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
     import tty
 
     selected = 0
+    n = len(sessions)
 
-    def render() -> None:
-        # Clear screen and home cursor before writing. Universal across
-        # terminals (works without alt-screen buffer support).
-        sys.stdout.write("\x1b[2J\x1b[H")
-        sys.stdout.write(f"  {B}Select a session (up/down + Enter, Esc to cancel){R}\n\n")
-        for i, s in enumerate(sessions):
-            marker = ">" if i == selected else " "
-            rel = _format_relative(s["updated_at"])
-            sys.stdout.write(
-                f"  {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}\n"
-            )
-        sys.stdout.flush()
+    def render_row(i: int) -> str:
+        s = sessions[i]
+        marker = ">" if i == selected else " "
+        rel = _format_relative(s["updated_at"])
+        return f"  {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}"
+
+    # Print initial list via print() so terminal handles newlines correctly.
+    # Position cursor on the LAST line after this.
+    print()
+    print(f"  {B}Select a session (up/down + Enter, Esc to cancel):{R}")
+    for i in range(n):
+        print(render_row(i))
+    sys.stdout.flush()
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
-        render()
         while True:
             ch = sys.stdin.read(1)
             if ch in ("\r", "\n"):
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
                 return sessions[selected]["wiki"]
             elif ch == "\x1b":
                 seq = sys.stdin.read(2)
                 if seq == "[A":
-                    selected = max(0, selected - 1)
-                    render()
+                    new = max(0, selected - 1)
                 elif seq == "[B":
-                    selected = min(len(sessions) - 1, selected + 1)
-                    render()
+                    new = min(n - 1, selected + 1)
                 else:
+                    # Bare escape (cancel) or unknown sequence
+                    sys.stdout.write("\r\n")
+                    sys.stdout.flush()
                     return None
+                if new == selected:
+                    continue
+                # Move cursor to current row (count rows below it)
+                rows_below_current = n - 1 - selected
+                if rows_below_current > 0:
+                    sys.stdout.write(f"\x1b[{rows_below_current}A")
+                # Overwrite current row (clear marker, keep EOL clean)
+                sys.stdout.write("\r")
+                sys.stdout.write(render_row(selected) + "\x1b[K")
+                # Update selection
+                selected = new
+                # Move cursor to new row
+                rows_below_new = n - 1 - selected
+                if rows_below_new > 0:
+                    sys.stdout.write(f"\x1b[{rows_below_new}B")
+                # Overwrite new row (with marker)
+                sys.stdout.write("\r")
+                sys.stdout.write(render_row(selected) + "\x1b[K")
+                sys.stdout.flush()
             elif ch in ("\x03", "\x04"):
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
                 return None
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
