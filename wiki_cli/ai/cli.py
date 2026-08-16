@@ -324,6 +324,7 @@ def _cmd_help() -> None:
     {C}/clear{R}          clear conversation history
     {C}/providers{R}      switch provider
     {C}/models{R}         switch model
+    {C}/add-wiki{R}       add a new wiki profile (auto-switches + clears history)
     {C}/switch-wiki{R}    switch active wiki (interactive, or /switch-wiki <name> or --new)
     {C}/wikis{R}          list saved wikis
     {C}/remove-wiki{R}    remove a wiki profile (asks to confirm)
@@ -395,6 +396,23 @@ def _cmd_remove_wiki(agent: WikiAgent, arg: str) -> None:
     print(f"  {G}removed → {target}{R}\n")
 
 
+def _cmd_add_wiki(agent: WikiAgent) -> None:
+    """Add a new wiki profile, set as active, rebuild agent, clear history."""
+    from wiki_cli.client import WikiJSClient
+    from wiki_cli.pages import PagesManager
+    from wiki_cli.wikis import _prompt_new_profile, save_wiki, set_active_wiki
+
+    name, url, api_key = _prompt_new_profile()
+    save_wiki(name, url, api_key)
+    set_active_wiki(name)
+
+    agent.wiki_client = WikiJSClient(url=url, api_key=api_key)
+    agent.pages = PagesManager(agent.wiki_client)
+    agent.clear_history()
+
+    print(f"  {G}saved → active: {name} (history cleared){R}\n")
+
+
 # ── Main ────────────────────────────────────────────────────────────
 
 def ai_mode() -> None:
@@ -460,6 +478,9 @@ def ai_mode() -> None:
             continue
         if prompt == "/remove-key":
             _cmd_remove_key(agent)
+            continue
+        if prompt == "/add-wiki":
+            _cmd_add_wiki(agent)
             continue
         if prompt.startswith("/switch-wiki"):
             arg = prompt[len("/switch-wiki"):].strip()

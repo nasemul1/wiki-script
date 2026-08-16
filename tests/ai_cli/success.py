@@ -75,3 +75,58 @@ def test_ai_remove_wiki_accepts_yes(capsys, tmp_wiki_config):
     with patch(INPUT_PATCH, side_effect=iter(["yes"])):
         _cmd_remove_wiki(agent, "b")
     assert wikis.get_wiki("b") is None
+
+
+def test_ai_add_wiki_saves_profile(capsys, tmp_wiki_config):
+    """Verify profile saved, set active, agent rebuilt."""
+    from wiki_cli.ai.cli import _cmd_add_wiki
+    from wiki_cli.pages import PagesManager
+
+    agent = MagicMock()
+    inputs = iter(["prod", "https://prod.com/graphql", "secret"])
+    with patch(INPUT_PATCH, side_effect=inputs):
+        _cmd_add_wiki(agent)
+    assert wikis.get_wiki("prod") == {
+        "url": "https://prod.com/graphql",
+        "api_key": "secret",
+    }
+    assert wikis.get_active_wiki_name() == "prod"
+    assert agent.wiki_client is not None
+    assert agent.wiki_client.url == "https://prod.com/graphql"
+    assert agent.wiki_client.api_key == "secret"
+    assert isinstance(agent.pages, PagesManager)
+    agent.clear_history.assert_called_once()
+    out = capsys.readouterr().out
+    assert "saved → active: prod" in out
+    assert "history cleared" in out
+    print(f"\n  [AI] /add-wiki saves + auto-switches + clears history")
+
+
+def test_ai_add_wiki_clears_history(capsys, tmp_wiki_config):
+    """Verify conversation history cleared after add."""
+    from wiki_cli.ai.cli import _cmd_add_wiki
+
+    agent = MagicMock()
+    inputs = iter(["w", "https://w.com/graphql", "k"])
+    with patch(INPUT_PATCH, side_effect=inputs):
+        _cmd_add_wiki(agent)
+    agent.clear_history.assert_called_once()
+    print(f"\n  [AI] /add-wiki clears conversation history")
+
+
+def test_ai_add_wiki_duplicate_name_no_change(capsys, tmp_wiki_config):
+    """Duplicate name raises WikiJSError; active not set, agent not rebuilt."""
+    import pytest
+    from wiki_cli import WikiJSError
+    from wiki_cli.ai.cli import _cmd_add_wiki
+
+    wikis.save_wiki("existing", "https://e.com/graphql", "k1")
+    agent = MagicMock()
+    original_client = agent.wiki_client
+    inputs = iter(["existing", "https://other.com/graphql", "k2"])
+    with patch(INPUT_PATCH, side_effect=inputs):
+        with pytest.raises(WikiJSError):
+            _cmd_add_wiki(agent)
+    assert wikis.get_active_wiki_name() is None
+    assert agent.wiki_client is original_client
+    print(f"\n  [AI] /add-wiki duplicate name raises and preserves state")
