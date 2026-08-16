@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from wiki_cli import wikis
+from wiki_cli import ai, wikis
 from wiki_cli.models import Page, PageResponse
 from wiki_cli.pages import PagesManager
 
@@ -45,3 +45,11 @@ def tmp_wiki_config(tmp_path, monkeypatch):
     monkeypatch.setattr(wikis, "WIKIS_FILE", f1)
     monkeypatch.setattr(wikis, "ACTIVE_FILE", f2)
     return f1, f2
+
+
+@pytest.fixture
+def tmp_sessions_dir(tmp_path, monkeypatch):
+    sessions_dir = tmp_path / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ai.sessions, "SESSIONS_DIR", sessions_dir)
+    return sessions_dir
