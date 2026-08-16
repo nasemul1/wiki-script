@@ -18,6 +18,7 @@ from pathlib import Path
 
 from wiki_cli import WikiJSError, wikis
 from wiki_cli.ai.agent import WikiAgent
+from wiki_cli.ai.readline import input_with_history
 from wiki_cli.ai.config import (
     AIConfig,
     PROVIDER_DEFAULTS,
@@ -124,7 +125,7 @@ def _pick_provider() -> str:
         print()
 
         while True:
-            choice = input(f"  {C}>{R} ").strip() or "1"
+            choice = input_with_history(f"  {C}>{R} ").strip() or "1"
             if choice.isdigit():
                 idx = int(choice)
                 if 1 <= idx <= len(saved_list):
@@ -143,7 +144,7 @@ def _pick_provider() -> str:
     print()
 
     while True:
-        choice = input(f"  {C}>{R} ").strip() or "1"
+        choice = input_with_history(f"  {C}>{R} ").strip() or "1"
         if choice.isdigit() and 1 <= int(choice) <= len(PROVIDERS):
             return PROVIDERS[int(choice) - 1][0]
         print(f"  {Y}invalid choice{R}")
@@ -157,7 +158,7 @@ def _enter_api_key(provider: str) -> str:
         saved = get_saved_key(provider)
         if saved:
             return saved
-        return input(f"  {C}>{R} api key: ").strip()
+        return input_with_history(f"  {C}>{R} api key: ").strip()
 
     saved = get_saved_key(provider)
     if saved:
@@ -166,14 +167,14 @@ def _enter_api_key(provider: str) -> str:
         print(f"    {C}1{R}    use saved")
         print(f"    {C}2{R}    enter new")
         print()
-        choice = input(f"  {C}>{R} ").strip() or "1"
+        choice = input_with_history(f"  {C}>{R} ").strip() or "1"
         if choice == "1":
             return saved
 
     label = _PROVIDER_LABELS.get(provider, provider)
     print(f"  {D}{label} api key:{R}")
     while True:
-        key = input(f"  {C}>{R} ").strip()
+        key = input_with_history(f"  {C}>{R} ").strip()
         if key:
             save_key(provider, key)
             print(f"  {G}saved{R}")
@@ -205,7 +206,7 @@ def _pick_model(provider: str, api_key: str) -> str:
     print()
 
     while True:
-        choice = input(f"  {C}>{R} model [1]: ").strip() or "1"
+        choice = input_with_history(f"  {C}>{R} model [1]: ").strip() or "1"
         if choice.isdigit() and 1 <= int(choice) <= len(models):
             picked = models[int(choice) - 1]
             print(f"  {G}selected:{R} {picked}")
@@ -306,7 +307,7 @@ def _cmd_models(agent: WikiAgent) -> None:
     print()
 
     while True:
-        choice = input(f"  {C}>{R} model [q=cancel]: ").strip()
+        choice = input_with_history(f"  {C}>{R} model [q=cancel]: ").strip()
         if choice.lower() == "q":
             return
         if choice.isdigit() and 1 <= int(choice) <= len(models):
@@ -403,7 +404,7 @@ def _cmd_remove_wiki(agent: WikiAgent, arg: str) -> None:
         print(f"  {Y}wiki '{target}' not found{R}\n")
         return
 
-    ans = input(f"  remove '{target}' ({entry['url']})? [y/n]: ").strip().lower()
+    ans = input_with_history(f"  remove '{target}' ({entry['url']})? [y/n]: ").strip().lower()
     if ans not in ("y", "yes"):
         print(f"  {D}cancelled{R}\n")
         return
@@ -642,7 +643,7 @@ def ai_mode() -> None:
 
     while True:
         try:
-            prompt = input(f"  {C}>{R} ").strip()
+            prompt = input_with_history(f"  {C}>{R} ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break

@@ -124,19 +124,22 @@ def get_active_client():
 
 
 def _read_api_key() -> str:
-    """Prompt for an API key via plain input() so paste works in any terminal.
+    """Prompt for an API key via readline input() so paste works in any terminal.
 
     getpass.getpass() can hang or drop pasted content depending on terminal
     mode (bracketed paste, kitty/wezterm). Plain input() reads the whole
     line including pastes. This matches _enter_api_key() in
-    wiki_cli/ai/cli.py which also uses input() for the same reason.
+    wiki_cli/ai/cli.py which also uses input_with_history() for the same reason.
     """
-    return input("  api key: ").strip()
+    from wiki_cli.ai.readline import input_with_history
+    return input_with_history("  api key: ").strip()
 
 
 def _prompt_new_profile() -> tuple[str, str, str]:
+    from wiki_cli.ai.readline import input_with_history
+
     while True:
-        name = input("  name: ").strip()
+        name = input_with_history("  name: ").strip()
         if not name:
             print("  required")
             continue
@@ -146,7 +149,7 @@ def _prompt_new_profile() -> tuple[str, str, str]:
         break
 
     while True:
-        url = input("  url: ").strip()
+        url = input_with_history("  url: ").strip()
         if url.startswith("http://") or url.startswith("https://"):
             break
         print("  url must start with http:// or https://")
