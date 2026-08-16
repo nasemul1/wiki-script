@@ -6,6 +6,7 @@ import sys
 
 from wiki_cli import WikiJSClient, WikiJSError
 from wiki_cli.pages import PagesManager
+from wiki_cli.cli_wikis import manage_wikis_menu
 from wiki_cli.wikis import get_active_client, switch_wiki_flow
 
 from wiki_cli.cli_pages import (
@@ -54,7 +55,7 @@ MENU = """
 
   --- System ---
   16. Test Connection
-  18. Switch Wiki
+  18. Manage Wikis
 
   --- AI ---
   17. AI Assistant
@@ -86,9 +87,9 @@ def main() -> None:
         print(f"Error initializing client: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    def _switch_wiki() -> None:
+    def _manage_wikis() -> None:
         nonlocal client, pages
-        client = switch_wiki_flow()
+        client = manage_wikis_menu(client)
         pages = PagesManager(client)
 
     handlers = {
@@ -109,7 +110,7 @@ def main() -> None:
         "15": ("Restore Revision", lambda: restore_revision(pages)),
         "16": ("Test Connection", lambda: test_connection(client, pages)),
         "17": ("AI Assistant", _ai_assistant),
-        "18": ("Switch Wiki", _switch_wiki),
+        "18": ("Manage Wikis", _manage_wikis),
     }
 
     while True:
