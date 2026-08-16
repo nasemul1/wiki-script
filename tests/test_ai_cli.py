@@ -74,3 +74,15 @@ def test_agent_clear_history_deletes_session(capsys, tmp_wiki_config, tmp_sessio
 
 def test_agent_warns_on_80pct_context(capsys, tmp_wiki_config, tmp_sessions_dir):
     _agent_warn(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+from ai_cli.success import test_ai_startup_resumes_existing_session as _resume
+from ai_cli.success import test_ai_clear_wipes_session_file as _clear_wipe
+
+
+def test_ai_startup_resumes_existing_session(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _resume(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_ai_clear_wipes_session_file(tmp_wiki_config, tmp_sessions_dir):
+    _clear_wipe(tmp_wiki_config, tmp_sessions_dir)

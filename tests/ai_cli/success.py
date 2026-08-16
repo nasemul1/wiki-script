@@ -220,3 +220,61 @@ def test_agent_warns_on_80pct_context(tmp_sessions_dir, tmp_wiki_config, capsys)
     assert MAX_CONTEXT_TOKENS == 100_000
     output = str(mock_stderr.write.call_args_list[0])
     assert "approaching" in output.lower() or "warning" in output.lower()
+
+
+def test_ai_startup_resumes_existing_session(capsys, tmp_wiki_config, tmp_sessions_dir):
+    """ai_mode() loads a pre-existing session and prints resume banner."""
+    from wiki_cli.ai.cli import ai_mode
+    from wiki_cli.ai.config import AIConfig
+    from wiki_cli.ai.sessions import save_session
+
+    save_session("work", [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "previous question"},
+        {"role": "assistant", "content": "previous answer"},
+    ])
+    wikis.set_active_wiki("work")
+
+    fake = MagicMock()
+    fake.url = "https://w.com/graphql"
+    cfg = AIConfig(provider="openrouter", api_key="x", model="m", base_url="")
+
+    with patch(INPUT_PATCH, side_effect=iter(["exit"])):
+        with patch("wiki_cli.ai.cli.get_active_client", return_value=fake):
+            with patch("wiki_cli.ai.cli._load_last_config", return_value=None):
+                with patch("wiki_cli.ai.cli.get_saved_key", return_value=""):
+                    with patch("wiki_cli.ai.cli._build_config", return_value=cfg):
+                        with patch("wiki_cli.ai.cli.WikiAgent") as mock_agent_cls:
+                            ai_mode()
+    mock_agent_cls.assert_called_once()
+    kwargs = mock_agent_cls.call_args.kwargs
+    assert kwargs.get("wiki_name") == "work"
+    out = capsys.readouterr().out
+    assert "resumed" in out.lower()
+
+
+def test_ai_clear_wipes_session_file(tmp_wiki_config, tmp_sessions_dir):
+    """ai_mode /clear dispatch deletes the session file."""
+    from wiki_cli.ai.cli import ai_mode
+    from wiki_cli.ai.config import AIConfig
+    from wiki_cli.ai.sessions import has_session, save_session
+
+    save_session("work", [{"role": "user", "content": "x"}])
+    assert has_session("work")
+
+    fake = MagicMock()
+    fake.url = "https://w.com/graphql"
+    cfg = AIConfig(provider="openrouter", api_key="x", model="m", base_url="")
+
+    inputs = iter(["/clear", "exit"])
+    with patch(INPUT_PATCH, side_effect=inputs):
+        with patch("wiki_cli.ai.cli.get_active_client", return_value=fake):
+            with patch("wiki_cli.ai.cli._load_last_config", return_value=None):
+                with patch("wiki_cli.ai.cli.get_saved_key", return_value=""):
+                    with patch("wiki_cli.ai.cli._build_config", return_value=cfg):
+                        with patch("wiki_cli.ai.cli.WikiAgent") as mock_agent_cls:
+                            mock_agent = MagicMock()
+                            mock_agent.wiki_name = "work"
+                            mock_agent_cls.return_value = mock_agent
+                            ai_mode()
+    assert not has_session("work")

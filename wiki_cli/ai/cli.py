@@ -36,6 +36,12 @@ from wiki_cli.wikis import (
     set_active_wiki,
     switch_wiki_flow,
 )
+from wiki_cli.ai.sessions import (
+    delete_session,
+    has_session,
+    load_session,
+    save_session,
+)
 from wiki_cli.pages import PagesManager
 
 PROVIDERS = [
@@ -415,6 +421,31 @@ def _cmd_add_wiki(agent: WikiAgent) -> None:
 
 # ── Main ────────────────────────────────────────────────────────────
 
+def _format_relative(timestamp: str) -> str:
+    """Format an ISO timestamp as a human-readable relative time."""
+    if not timestamp:
+        return "unknown"
+    from datetime import datetime, timezone
+    try:
+        dt = datetime.fromisoformat(timestamp)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - dt
+        seconds = int(delta.total_seconds())
+        if seconds < 60:
+            return "just now"
+        if seconds < 3600:
+            m = seconds // 60
+            return f"{m} min ago" if m == 1 else f"{m} mins ago"
+        if seconds < 86400:
+            h = seconds // 3600
+            return f"{h} hour ago" if h == 1 else f"{h} hours ago"
+        d = seconds // 86400
+        return f"{d} day ago" if d == 1 else f"{d} days ago"
+    except Exception:
+        return "unknown"
+
+
 def ai_mode() -> None:
     _banner()
 
@@ -425,15 +456,28 @@ def ai_mode() -> None:
             print(f"  {D}no active wiki. let's configure one.{R}\n")
             client = switch_wiki_flow()
 
+        wiki_name = get_active_wiki_name()
+
         last = _load_last_config()
         if last and get_saved_key(last.get("provider", "")):
             provider = last["provider"]
             model = last["model"]
             config = _build_config_from_saved(provider, model)
-            agent = WikiAgent(config=config, wiki_client=client)
+            agent = WikiAgent(config=config, wiki_client=client, wiki_name=wiki_name)
         else:
             config = _build_config()
-            agent = WikiAgent(config=config, wiki_client=client)
+            agent = WikiAgent(config=config, wiki_client=client, wiki_name=wiki_name)
+
+        if wiki_name and has_session(wiki_name):
+            session = load_session(wiki_name)
+            if session:
+                agent.messages = session["messages"]
+                agent._warned_at_80pct = False
+                timestamp = session.get("updated_at", "")
+                rel = _format_relative(timestamp)
+                print(
+                    f"  {D}resumed previous session ({len(session['messages'])} messages, last: {rel}){R}\n"
+                )
 
     except WikiJSError as exc:
         print(f"  {Y}error: {exc}{R}", file=sys.stderr)
@@ -461,6 +505,11 @@ def ai_mode() -> None:
             _cmd_help()
             continue
         if prompt == "/clear":
+            if agent.wiki_name:
+                try:
+                    delete_session(agent.wiki_name)
+                except Exception:
+                    pass
             agent.clear_history()
             print(f"  {G}history cleared{R}\n")
             continue
