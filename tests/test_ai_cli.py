@@ -78,6 +78,10 @@ def test_agent_warns_on_80pct_context(capsys, tmp_wiki_config, tmp_sessions_dir)
 
 from ai_cli.success import test_ai_startup_resumes_existing_session as _resume
 from ai_cli.success import test_ai_clear_wipes_session_file as _clear_wipe
+from ai_cli.success import test_switch_wiki_saves_outgoing_session as _switch_save
+from ai_cli.success import test_switch_wiki_updates_wiki_name as _switch_name
+from ai_cli.success import test_switch_wiki_loads_incoming_session as _switch_load
+from ai_cli.success import test_add_wiki_saves_outgoing_session as _add_save_out
 
 
 def test_ai_startup_resumes_existing_session(capsys, tmp_wiki_config, tmp_sessions_dir):
@@ -86,3 +90,19 @@ def test_ai_startup_resumes_existing_session(capsys, tmp_wiki_config, tmp_sessio
 
 def test_ai_clear_wipes_session_file(tmp_wiki_config, tmp_sessions_dir):
     _clear_wipe(tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_switch_wiki_saves_outgoing_session(tmp_wiki_config, tmp_sessions_dir):
+    _switch_save(tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_switch_wiki_updates_wiki_name(tmp_wiki_config):
+    _switch_name(tmp_wiki_config)
+
+
+def test_switch_wiki_loads_incoming_session(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _switch_load(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_add_wiki_saves_outgoing_session(tmp_wiki_config, tmp_sessions_dir):
+    _add_save_out(tmp_wiki_config, tmp_sessions_dir)

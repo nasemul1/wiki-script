@@ -341,10 +341,32 @@ def _cmd_help() -> None:
 
 
 def _cmd_switch_wiki(agent: WikiAgent, arg: str) -> None:
-    """Rebuild agent.wiki_client + agent.pages after switching."""
+    """Rebuild agent for the target wiki, persisting + restoring sessions."""
+    if agent.wiki_name:
+        try:
+            save_session(agent.wiki_name, agent.messages)
+        except Exception:
+            pass
+
     new_client = switch_wiki_flow(arg)
     agent.wiki_client = new_client
     agent.pages = PagesManager(new_client)
+    agent.wiki_name = get_active_wiki_name()
+
+    if agent.wiki_name and has_session(agent.wiki_name):
+        session = load_session(agent.wiki_name)
+        if session:
+            agent.messages = session["messages"]
+            agent._warned_at_80pct = False
+            rel = _format_relative(session.get("updated_at", ""))
+            print(
+                f"  {D}resumed previous session ({len(session['messages'])} messages, last: {rel}){R}"
+            )
+        else:
+            agent.clear_history()
+    else:
+        agent.clear_history()
+
     print()
 
 
@@ -403,10 +425,16 @@ def _cmd_remove_wiki(agent: WikiAgent, arg: str) -> None:
 
 
 def _cmd_add_wiki(agent: WikiAgent) -> None:
-    """Add a new wiki profile, set as active, rebuild agent, clear history."""
+    """Add a new wiki profile, set as active, rebuild agent, swap session."""
     from wiki_cli.client import WikiJSClient
     from wiki_cli.pages import PagesManager
     from wiki_cli.wikis import _prompt_new_profile, save_wiki, set_active_wiki
+
+    if agent.wiki_name:
+        try:
+            save_session(agent.wiki_name, agent.messages)
+        except Exception:
+            pass
 
     name, url, api_key = _prompt_new_profile()
     save_wiki(name, url, api_key)
@@ -414,9 +442,23 @@ def _cmd_add_wiki(agent: WikiAgent) -> None:
 
     agent.wiki_client = WikiJSClient(url=url, api_key=api_key)
     agent.pages = PagesManager(agent.wiki_client)
-    agent.clear_history()
+    agent.wiki_name = name
 
-    print(f"  {G}saved → active: {name} (history cleared){R}\n")
+    if has_session(agent.wiki_name):
+        session = load_session(agent.wiki_name)
+        if session:
+            agent.messages = session["messages"]
+            agent._warned_at_80pct = False
+            rel = _format_relative(session.get("updated_at", ""))
+            print(
+                f"  {D}resumed previous session ({len(session['messages'])} messages, last: {rel}){R}"
+            )
+        else:
+            agent.clear_history()
+    else:
+        agent.clear_history()
+
+    print(f"  {G}saved → active: {name}{R}\n")
 
 
 # ── Main ────────────────────────────────────────────────────────────

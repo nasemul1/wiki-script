@@ -83,6 +83,7 @@ def test_ai_add_wiki_saves_profile(capsys, tmp_wiki_config):
     from wiki_cli.pages import PagesManager
 
     agent = MagicMock()
+    agent.wiki_name = None
     inputs = iter(["prod", "https://prod.com/graphql", "secret"])
     with patch(INPUT_PATCH, side_effect=inputs):
         _cmd_add_wiki(agent)
@@ -98,7 +99,6 @@ def test_ai_add_wiki_saves_profile(capsys, tmp_wiki_config):
     agent.clear_history.assert_called_once()
     out = capsys.readouterr().out
     assert "saved → active: prod" in out
-    assert "history cleared" in out
     print(f"\n  [AI] /add-wiki saves + auto-switches + clears history")
 
 
@@ -107,6 +107,7 @@ def test_ai_add_wiki_clears_history(capsys, tmp_wiki_config):
     from wiki_cli.ai.cli import _cmd_add_wiki
 
     agent = MagicMock()
+    agent.wiki_name = None
     inputs = iter(["w", "https://w.com/graphql", "k"])
     with patch(INPUT_PATCH, side_effect=inputs):
         _cmd_add_wiki(agent)
@@ -122,6 +123,7 @@ def test_ai_add_wiki_duplicate_name_no_change(capsys, tmp_wiki_config):
 
     wikis.save_wiki("existing", "https://e.com/graphql", "k1")
     agent = MagicMock()
+    agent.wiki_name = None
     original_client = agent.wiki_client
     inputs = iter(["existing", "https://other.com/graphql", "k2"])
     with patch(INPUT_PATCH, side_effect=inputs):
@@ -278,3 +280,100 @@ def test_ai_clear_wipes_session_file(tmp_wiki_config, tmp_sessions_dir):
                             mock_agent_cls.return_value = mock_agent
                             ai_mode()
     assert not has_session("work")
+
+
+def test_switch_wiki_saves_outgoing_session(tmp_wiki_config, tmp_sessions_dir):
+    """Switching wikis must persist the outgoing wiki's messages to disk."""
+    from wiki_cli.ai.cli import _cmd_switch_wiki
+    from wiki_cli.ai.sessions import has_session, load_session
+
+    wikis.save_wiki("home", "https://home.com/graphql", "kh")
+    wikis.save_wiki("work", "https://work.com/graphql", "kw")
+    wikis.set_active_wiki("home")
+
+    agent = MagicMock()
+    agent.wiki_name = "home"
+    agent.messages = [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "draft question"},
+        {"role": "assistant", "content": "draft answer"},
+    ]
+
+    _cmd_switch_wiki(agent, "work")
+
+    assert has_session("home")
+    saved = load_session("home")
+    assert any(m["content"] == "draft answer" for m in saved["messages"])
+
+
+def test_switch_wiki_updates_wiki_name(tmp_wiki_config):
+    """agent.wiki_name must reflect the new active profile, not the old one."""
+    from wiki_cli.ai.cli import _cmd_switch_wiki
+
+    wikis.save_wiki("home", "https://home.com/graphql", "kh")
+    wikis.save_wiki("work", "https://work.com/graphql", "kw")
+    wikis.set_active_wiki("home")
+
+    agent = MagicMock()
+    agent.wiki_name = "home"
+    agent.messages = []
+
+    _cmd_switch_wiki(agent, "work")
+
+    assert agent.wiki_name == "work"
+    assert wikis.get_active_wiki_name() == "work"
+
+
+def test_switch_wiki_loads_incoming_session(capsys, tmp_wiki_config, tmp_sessions_dir):
+    """Switching to a wiki with a saved session must restore its messages."""
+    from wiki_cli.ai.cli import _cmd_switch_wiki
+    from wiki_cli.ai.sessions import save_session
+
+    wikis.save_wiki("home", "https://home.com/graphql", "kh")
+    wikis.save_wiki("work", "https://work.com/graphql", "kw")
+    wikis.set_active_wiki("home")
+    save_session("work", [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "old work question"},
+        {"role": "assistant", "content": "old work answer"},
+    ])
+
+    agent = MagicMock()
+    agent.wiki_name = "home"
+    agent.messages = [{"role": "user", "content": "home-only"}]
+    agent._warned_at_80pct = True
+
+    _cmd_switch_wiki(agent, "work")
+
+    assert agent.wiki_name == "work"
+    assert agent._warned_at_80pct is False
+    assert any(m["content"] == "old work answer" for m in agent.messages)
+    out = capsys.readouterr().out
+    assert "resumed" in out.lower()
+
+
+def test_add_wiki_saves_outgoing_session(tmp_wiki_config, tmp_sessions_dir):
+    """Adding a new wiki must persist the outgoing wiki's messages first."""
+    from wiki_cli.ai.cli import _cmd_add_wiki
+    from wiki_cli.ai.sessions import has_session, load_session
+
+    wikis.save_wiki("home", "https://home.com/graphql", "kh")
+    wikis.set_active_wiki("home")
+
+    agent = MagicMock()
+    agent.wiki_name = "home"
+    agent.messages = [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "important follow-up"},
+        {"role": "assistant", "content": "detailed answer"},
+    ]
+
+    inputs = iter(["newone", "https://new.com/graphql", "kn"])
+    with patch(INPUT_PATCH, side_effect=inputs):
+        _cmd_add_wiki(agent)
+
+    assert has_session("home")
+    saved = load_session("home")
+    assert any(m["content"] == "detailed answer" for m in saved["messages"])
+    assert agent.wiki_name == "newone"
+    assert not has_session("newone")
