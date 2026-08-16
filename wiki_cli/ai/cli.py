@@ -508,7 +508,12 @@ def _swap_session(agent: WikiAgent, target_wiki: str) -> None:
 
 
 def _pick_session(current_wiki: str | None = None) -> str | None:
-    """Interactive picker. Arrow keys + Enter. Returns selected wiki name or None."""
+    """Interactive picker. Arrow keys + Enter. Returns selected wiki name or None.
+
+    Uses ANSI clear-screen + cursor-home before each render. Works on any
+    terminal that supports basic VT100 escape sequences — no alt-screen
+    buffer required (avoids issues with terminals that don't support it).
+    """
     sessions = list_sessions()
     if not sessions:
         return None
@@ -528,8 +533,9 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
     selected = 0
 
     def render() -> None:
-        sys.stdout.write("\x1b[?1049h")
-        sys.stdout.write("\x1b[H")
+        # Clear screen and home cursor before writing. Universal across
+        # terminals (works without alt-screen buffer support).
+        sys.stdout.write("\x1b[2J\x1b[H")
         sys.stdout.write(f"  {B}Select a session (up/down + Enter, Esc to cancel){R}\n\n")
         for i, s in enumerate(sessions):
             marker = ">" if i == selected else " "
@@ -547,32 +553,21 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
         while True:
             ch = sys.stdin.read(1)
             if ch in ("\r", "\n"):
-                sys.stdout.write("\x1b[?1049l")
-                sys.stdout.flush()
                 return sessions[selected]["wiki"]
             elif ch == "\x1b":
                 seq = sys.stdin.read(2)
                 if seq == "[A":
                     selected = max(0, selected - 1)
+                    render()
                 elif seq == "[B":
                     selected = min(len(sessions) - 1, selected + 1)
+                    render()
                 else:
-                    sys.stdout.write("\x1b[?1049l")
-                    sys.stdout.flush()
                     return None
-                render()
-            elif ch == "\x03":
-                sys.stdout.write("\x1b[?1049l")
-                sys.stdout.flush()
-                return None
-            elif ch == "\x04":
-                sys.stdout.write("\x1b[?1049l")
-                sys.stdout.flush()
+            elif ch in ("\x03", "\x04"):
                 return None
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        sys.stdout.write("\x1b[?1049l")
-        sys.stdout.flush()
 
 
 # ── Main ────────────────────────────────────────────────────────────
