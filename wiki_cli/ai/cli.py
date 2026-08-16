@@ -508,15 +508,22 @@ def _swap_session(agent: WikiAgent, target_wiki: str) -> None:
 
 
 def _pick_session(current_wiki: str | None = None) -> str | None:
-    """Interactive session picker.
+    """Interactive picker. Arrow keys + Enter. Returns selected wiki name or None.
 
-    Prints a numbered list of saved sessions and accepts a number, name, or
-    'q' to cancel. Uses input_with_history() so the user gets arrow-key
-    editing + history on the input line.
+    Hides the terminal cursor (\x1b[?25l) before entering raw mode so any
+    terminal caret drift during arrow-key navigation is invisible. Restores
+    cursor visibility (\x1b[?25h) on exit.
 
-    Avoids raw mode + escape-sequence cursor positioning, which can cause
-    terminal caret drift on some terminals (terminal caret moves when
-    arrow keys are pressed even while the application reads them).
+    Disables application cursor keys (\x1b[?1l) so the terminal sends normal
+    CSI sequences (\x1b[A/B) instead of app-specific codes. Restores on exit.
+
+    Uses cbreak mode (tty.setcbreak) instead of full raw mode to keep signal
+    handling (SIGINT, SIGQUIT) wired up correctly.
+
+    Renders the list once via print() so the terminal handles newlines
+    correctly, then uses relative cursor moves (\x1b[N A/B) to overwrite
+    only the affected rows on each selection change. \x1b[K clears to end
+    of line in case the previous row was longer.
     """
     sessions = list_sessions()
     if not sessions:
@@ -528,32 +535,83 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
 
     sessions = sorted(sessions, key=sort_key, reverse=False)
 
-    print()
-    print(f"  {B}Select a session (number, name, or 'q' to cancel):{R}")
-    for i, s in enumerate(sessions):
-        marker = "*" if s["wiki"] == current_wiki else " "
+    if not sys.stdin.isatty():
+        return None
+
+    import termios
+    import tty
+
+    selected = 0
+    n = len(sessions)
+
+    def render_row(i: int) -> str:
+        s = sessions[i]
+        marker = ">" if i == selected else " "
         rel = _format_relative(s["updated_at"])
-        print(f"  {C}{i+1}{R}. {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}")
+        return f"  {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}"
+
+    # Save cursor state. Tell terminal:
+    # - Use normal (not application) cursor keys — so we get CSI sequences
+    # - Hide cursor — so any caret drift during raw mode is invisible
+    sys.stdout.write("\x1b[?1l")    # normal cursor keys
+    sys.stdout.write("\x1b[?25l")   # hide cursor
+    sys.stdout.flush()
+
+    # Print the list once. Cursor ends up on the last line.
     print()
-    print(f"  {D}Arrow keys edit input. Up/Down recall history.{R}")
+    print(f"  {B}Select a session (up/down + Enter, Esc to cancel):{R}")
+    for i in range(n):
+        print(render_row(i))
+    sys.stdout.flush()
 
-    from wiki_cli.ai.readline import input_with_history
-
-    while True:
-        try:
-            choice = input_with_history("  > ").strip()
-        except (EOFError, KeyboardInterrupt):
-            return None
-        if not choice or choice.lower() in ("q", "quit", "cancel", "exit"):
-            return None
-        if choice.isdigit():
-            idx = int(choice) - 1
-            if 0 <= idx < len(sessions):
-                return sessions[idx]["wiki"]
-        for s in sessions:
-            if s["wiki"] == choice:
-                return s["wiki"]
-        print(f"  {Y}invalid choice — enter a number or wiki name{R}")
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        while True:
+            ch = sys.stdin.read(1)
+            if ch in ("\r", "\n"):
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
+                return sessions[selected]["wiki"]
+            elif ch == "\x1b":
+                seq = sys.stdin.read(2)
+                if seq == "[A":
+                    new = max(0, selected - 1)
+                elif seq == "[B":
+                    new = min(n - 1, selected + 1)
+                else:
+                    # Bare escape or unknown sequence — cancel
+                    sys.stdout.write("\r\n")
+                    sys.stdout.flush()
+                    return None
+                if new == selected:
+                    continue
+                # Move cursor to current row (rows below it = n - 1 - selected)
+                rows_below_current = n - 1 - selected
+                if rows_below_current > 0:
+                    sys.stdout.write(f"\x1b[{rows_below_current}A")
+                sys.stdout.write("\r")
+                sys.stdout.write(render_row(selected) + "\x1b[K")
+                selected = new
+                # Move cursor to new row (rows below new selection)
+                rows_below_new = n - 1 - selected
+                if rows_below_new > 0:
+                    sys.stdout.write(f"\x1b[{rows_below_new}B")
+                sys.stdout.write("\r")
+                sys.stdout.write(render_row(selected) + "\x1b[K")
+                sys.stdout.flush()
+            elif ch in ("\x03", "\x04"):
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
+                return None
+    finally:
+        # Restore terminal: flush pending input, restore settings, restore
+        # cursor visibility, re-enable application cursor keys.
+        termios.tcsetattr(fd, termios.TCSAFLUSH, old_settings)
+        sys.stdout.write("\x1b[?25h")  # show cursor
+        sys.stdout.write("\x1b[?1h")    # application cursor keys
+        sys.stdout.flush()
 
 
 # ── Main ────────────────────────────────────────────────────────────
