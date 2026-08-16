@@ -87,3 +87,51 @@ def test_save_atomically_replaces(tmp_sessions_dir):
     # No .tmp files left
     tmps = list(sessions.SESSIONS_DIR.glob("*.tmp"))
     assert tmps == []
+
+
+def test_list_sessions_empty(tmp_sessions_dir):
+    from wiki_cli.ai.sessions import list_sessions
+    assert list_sessions() == []
+
+
+def test_list_sessions_returns_saved(tmp_sessions_dir):
+    from wiki_cli.ai.sessions import list_sessions
+    save_session("work", [{"role": "user", "content": str(i)} for i in range(5)])
+    save_session("home", [{"role": "user", "content": "y"}] * 3)
+    out = list_sessions()
+    assert len(out) == 2
+    names = {s["wiki"] for s in out}
+    assert names == {"work", "home"}
+
+
+def test_list_sessions_includes_message_count(tmp_sessions_dir):
+    from wiki_cli.ai.sessions import list_sessions
+    save_session("w", [{"role": "user", "content": str(i)} for i in range(7)])
+    out = list_sessions()
+    assert len(out) == 1
+    assert out[0]["message_count"] == 7
+    assert out[0]["wiki"] == "w"
+
+
+def test_list_sessions_skips_corrupt(tmp_sessions_dir):
+    from wiki_cli.ai.sessions import list_sessions
+    save_session("good", [{"role": "user", "content": "x"}])
+    (sessions.SESSIONS_DIR / "bad.json").write_text("not json")
+    out = list_sessions()
+    assert len(out) == 1
+    assert out[0]["wiki"] == "good"
+
+
+def test_list_sessions_includes_timestamps(tmp_sessions_dir):
+    from wiki_cli.ai.sessions import list_sessions
+    save_session("w", [{"role": "user", "content": "x"}])
+    out = list_sessions()
+    assert out[0]["updated_at"]
+    assert out[0]["created_at"]
+
+
+def test_list_sessions_missing_dir_returns_empty(tmp_sessions_dir):
+    from wiki_cli.ai.sessions import SESSIONS_DIR, list_sessions
+    import shutil
+    shutil.rmtree(SESSIONS_DIR)
+    assert list_sessions() == []

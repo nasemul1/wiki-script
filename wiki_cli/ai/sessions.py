@@ -78,3 +78,26 @@ def delete_session(wiki_name: str) -> None:
     path = _session_path(wiki_name)
     if path.exists():
         path.unlink()
+
+
+def list_sessions() -> list[dict[str, Any]]:
+    """Return all saved sessions across all wikis.
+
+    Skips corrupt files silently. Returns [] if SESSIONS_DIR does not exist.
+    """
+    if not SESSIONS_DIR.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for path in SESSIONS_DIR.glob("*.json"):
+        session = load_session(path.stem)
+        if session is None:
+            continue
+        out.append(
+            {
+                "wiki": session.get("wiki", path.stem),
+                "message_count": len(session.get("messages", [])),
+                "updated_at": session.get("updated_at", ""),
+                "created_at": session.get("created_at", ""),
+            }
+        )
+    return out
