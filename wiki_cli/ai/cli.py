@@ -336,9 +336,15 @@ def _cmd_help() -> None:
     {C}/switch-wiki{R}    switch active wiki (interactive, or /switch-wiki <name> or --new)
     {C}/wikis{R}          list saved wikis
     {C}/remove-wiki{R}    remove a wiki profile (asks to confirm)
+    {C}/sessions{R}       list all saved wiki sessions with message count
+    {C}/use{R}            hot-swap session via interactive arrow-key picker
+    {C}/use <name>{R}     jump directly to a named session
     {C}/remove-key{R}     remove saved api key
     {C}/help{R}           show this help
     {C}exit{R}            quit
+
+  prompts support arrow-key cursor movement (left/right/home/end),
+  history recall (up/down), and history search on linux/macos.
 """)
 
 
