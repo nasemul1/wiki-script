@@ -57,8 +57,8 @@ def test_menu_handles_error(capsys, tmp_wiki_config):
     print(f"\n  [MENU] WikiJSError handled gracefully")
 
 
-def test_menu_option_18_label(capsys, tmp_wiki_config):
-    """Verify the menu displays 'Manage Wikis' for option 18."""
+def test_menu_option_17_label(capsys, tmp_wiki_config):
+    """Verify the menu displays 'Manage Wikis' for option 17."""
     with patch(INPUT_PATCH, side_effect=iter(["0"])):
         with patch("wiki_cli.cli_main.get_active_client", return_value=_client()):
             with patch("wiki_cli.cli_main.PagesManager"):
@@ -66,14 +66,14 @@ def test_menu_option_18_label(capsys, tmp_wiki_config):
     output = capsys.readouterr().out
     assert "Manage Wikis" in output
     assert "Switch Wiki" not in output
-    print(f"\n  [MENU] Option 18 labeled 'Manage Wikis'")
+    print(f"\n  [MENU] Option 17 labeled 'Manage Wikis'")
 
 
 def test_menu_manage_wikis_rebuilds(capsys, tmp_wiki_config):
-    """Option 18 delegates to manage_wikis_menu and rebuilds client."""
+    """Option 17 delegates to manage_wikis_menu and rebuilds client."""
     new_client = MagicMock(spec=WikiJSClient)
     new_client.url = "https://new.com/graphql"
-    with patch(INPUT_PATCH, side_effect=iter(["18", "", "0"])):
+    with patch(INPUT_PATCH, side_effect=iter(["17", "", "0"])):
         with patch("wiki_cli.cli_main.get_active_client", return_value=_client()):
             with patch("wiki_cli.cli_main.PagesManager") as mock_pm:
                 with patch(
@@ -85,4 +85,4 @@ def test_menu_manage_wikis_rebuilds(capsys, tmp_wiki_config):
     assert mock_pm.call_count == 2
     output = capsys.readouterr().out
     assert "Manage Wikis" in output
-    print(f"\n  [MENU] Option 18 delegates to manage_wikis_menu")
+    print(f"\n  [MENU] Option 17 delegates to manage_wikis_menu")

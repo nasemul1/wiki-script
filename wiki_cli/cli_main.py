@@ -55,10 +55,10 @@ MENU = """
 
   --- System ---
   16. Test Connection
-  18. Manage Wikis
+  17. Manage Wikis
 
   --- AI ---
-  17. AI Assistant
+  18. AI Assistant
   0. Exit
 ========================================
 """
@@ -109,8 +109,8 @@ def main() -> None:
         "14": ("Diff Two Revisions", lambda: diff_two_revisions(pages)),
         "15": ("Restore Revision", lambda: restore_revision(pages)),
         "16": ("Test Connection", lambda: test_connection(client, pages)),
-        "17": ("AI Assistant", _ai_assistant),
-        "18": ("Manage Wikis", _manage_wikis),
+        "17": ("Manage Wikis", _manage_wikis),
+        "18": ("AI Assistant", _ai_assistant),
     }
 
     while True:

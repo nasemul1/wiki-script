@@ -36,9 +36,9 @@ Wiki.js credentials are managed through named profiles — no `.env` required.
 
 **Switching wikis:**
 - From the AI assistant: `/switch-wiki` (interactive), `/switch-wiki <name>` (jump), `/switch-wiki --new` (force create)
-- From the main menu: option `18. Manage Wikis` (submenu with switch / add / list / remove)
-- List profiles: `/wikis` or main menu option `18 → 3`
-- Remove a profile: `/remove-wiki [name]` or main menu option `18 → 4` (both ask to confirm)
+- From the main menu: option `17. Manage Wikis` (submenu with switch / add / list / remove)
+- List profiles: `/wikis` or main menu option `17 → 3`
+- Remove a profile: `/remove-wiki [name]` or main menu option `17 → 4` (both ask to confirm)
 
 ## Usage
 
