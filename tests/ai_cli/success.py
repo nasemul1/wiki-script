@@ -501,6 +501,6 @@ def test_ai_swap_session_saves_outgoing(tmp_wiki_config, tmp_sessions_dir):
     _swap_session(agent, "home")
 
     saved_work = load_session("work")
-    assert saved_work["messages"] == agent.messages
+    assert saved_work["messages"] == [{"role": "user", "content": "work content"}]
     assert agent.messages[0]["content"] == "home prior"
     assert agent._warned_at_80pct is False

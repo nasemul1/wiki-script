@@ -481,10 +481,9 @@ def _cmd_sessions(agent: WikiAgent) -> None:
 
 def _swap_session(agent: WikiAgent, target_wiki: str) -> None:
     """Hot-swap agent to use target_wiki's session. Saves outgoing first."""
-    outgoing = agent.wiki_name
-    if outgoing and outgoing != target_wiki:
+    if agent.wiki_name and agent.wiki_name != target_wiki:
         try:
-            save_session(outgoing, agent.messages)
+            save_session(agent.wiki_name, agent.messages)
         except Exception:
             pass
 
@@ -493,11 +492,6 @@ def _swap_session(agent: WikiAgent, target_wiki: str) -> None:
     if session:
         agent.messages = session["messages"]
         agent._warned_at_80pct = False
-        if outgoing and outgoing != target_wiki:
-            try:
-                save_session(outgoing, agent.messages)
-            except Exception:
-                pass
         print(
             f"  {G}switched → {target_wiki} ({len(session['messages'])} messages){R}\n"
         )
