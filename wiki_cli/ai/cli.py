@@ -508,16 +508,15 @@ def _swap_session(agent: WikiAgent, target_wiki: str) -> None:
 
 
 def _pick_session(current_wiki: str | None = None) -> str | None:
-    """Interactive picker. Arrow keys + Enter. Returns selected wiki name or None.
+    """Interactive session picker.
 
-    Renders the list once via print() (which uses the platform's standard
-    newline), then on each Up/Down uses relative cursor movement
-    (\\x1b[N A/B) to overwrite just the affected rows. Uses \\x1b[K
-    (clear to end of line) to handle row width changes.
+    Prints a numbered list of saved sessions and accepts a number, name, or
+    'q' to cancel. Uses input_with_history() so the user gets arrow-key
+    editing + history on the input line.
 
-    Avoids clear-screen and home-cursor escapes which can fail in
-    some terminals. Only uses basic VT100 primitives that are universally
-    supported.
+    Avoids raw mode + escape-sequence cursor positioning, which can cause
+    terminal caret drift on some terminals (terminal caret moves when
+    arrow keys are pressed even while the application reads them).
     """
     sessions = list_sessions()
     if not sessions:
@@ -529,75 +528,32 @@ def _pick_session(current_wiki: str | None = None) -> str | None:
 
     sessions = sorted(sessions, key=sort_key, reverse=False)
 
-    if not sys.stdin.isatty():
-        return None
-
-    import termios
-    import tty
-
-    selected = 0
-    n = len(sessions)
-
-    def render_row(i: int) -> str:
-        s = sessions[i]
-        marker = ">" if i == selected else " "
-        rel = _format_relative(s["updated_at"])
-        return f"  {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}"
-
-    # Print initial list via print() so terminal handles newlines correctly.
-    # Position cursor on the LAST line after this.
     print()
-    print(f"  {B}Select a session (up/down + Enter, Esc to cancel):{R}")
-    for i in range(n):
-        print(render_row(i))
-    sys.stdout.flush()
+    print(f"  {B}Select a session (number, name, or 'q' to cancel):{R}")
+    for i, s in enumerate(sessions):
+        marker = "*" if s["wiki"] == current_wiki else " "
+        rel = _format_relative(s["updated_at"])
+        print(f"  {C}{i+1}{R}. {marker} {s['wiki']:<16} {s['message_count']:>4} msgs, last: {rel}")
+    print()
+    print(f"  {D}Arrow keys edit input. Up/Down recall history.{R}")
 
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        while True:
-            ch = sys.stdin.read(1)
-            if ch in ("\r", "\n"):
-                sys.stdout.write("\r\n")
-                sys.stdout.flush()
-                return sessions[selected]["wiki"]
-            elif ch == "\x1b":
-                seq = sys.stdin.read(2)
-                if seq == "[A":
-                    new = max(0, selected - 1)
-                elif seq == "[B":
-                    new = min(n - 1, selected + 1)
-                else:
-                    # Bare escape (cancel) or unknown sequence
-                    sys.stdout.write("\r\n")
-                    sys.stdout.flush()
-                    return None
-                if new == selected:
-                    continue
-                # Move cursor to current row (count rows below it)
-                rows_below_current = n - 1 - selected
-                if rows_below_current > 0:
-                    sys.stdout.write(f"\x1b[{rows_below_current}A")
-                # Overwrite current row (clear marker, keep EOL clean)
-                sys.stdout.write("\r")
-                sys.stdout.write(render_row(selected) + "\x1b[K")
-                # Update selection
-                selected = new
-                # Move cursor to new row
-                rows_below_new = n - 1 - selected
-                if rows_below_new > 0:
-                    sys.stdout.write(f"\x1b[{rows_below_new}B")
-                # Overwrite new row (with marker)
-                sys.stdout.write("\r")
-                sys.stdout.write(render_row(selected) + "\x1b[K")
-                sys.stdout.flush()
-            elif ch in ("\x03", "\x04"):
-                sys.stdout.write("\r\n")
-                sys.stdout.flush()
-                return None
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    from wiki_cli.ai.readline import input_with_history
+
+    while True:
+        try:
+            choice = input_with_history("  > ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        if not choice or choice.lower() in ("q", "quit", "cancel", "exit"):
+            return None
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(sessions):
+                return sessions[idx]["wiki"]
+        for s in sessions:
+            if s["wiki"] == choice:
+                return s["wiki"]
+        print(f"  {Y}invalid choice — enter a number or wiki name{R}")
 
 
 # ── Main ────────────────────────────────────────────────────────────
