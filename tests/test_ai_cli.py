@@ -57,3 +57,20 @@ def test_ai_add_wiki_duplicate_name_no_change(capsys, tmp_wiki_config):
 
 def test_ai_add_wiki_dispatch_catches_duplicate(capsys, tmp_wiki_config):
     _add_dispatch(capsys, tmp_wiki_config)
+
+
+from ai_cli.success import test_agent_saves_session_after_run as _agent_save
+from ai_cli.success import test_agent_clear_history_deletes_session as _agent_clear
+from ai_cli.success import test_agent_warns_on_80pct_context as _agent_warn
+
+
+def test_agent_saves_session_after_run(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _agent_save(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_agent_clear_history_deletes_session(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _agent_clear(capsys, tmp_wiki_config, tmp_sessions_dir)
+
+
+def test_agent_warns_on_80pct_context(capsys, tmp_wiki_config, tmp_sessions_dir):
+    _agent_warn(capsys, tmp_wiki_config, tmp_sessions_dir)

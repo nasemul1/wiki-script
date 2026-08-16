@@ -161,3 +161,62 @@ def test_ai_add_wiki_dispatch_catches_duplicate(capsys, tmp_wiki_config):
     assert "already exists" in out
     assert "wiki-ai" in out
     print(f"\n  [AI] /add-wiki dispatch catches WikiJSError and continues")
+
+
+def test_agent_saves_session_after_run(capsys, tmp_wiki_config, tmp_sessions_dir):
+    """WikiAgent.run() persists the messages list to disk."""
+    from wiki_cli.ai.agent import WikiAgent
+    from wiki_cli.ai.config import AIConfig
+    from wiki_cli.ai.sessions import has_session, load_session
+
+    agent = WikiAgent(
+        config=AIConfig(provider="openrouter", api_key="x", model="m", base_url=""),
+        wiki_client=MagicMock(),
+        wiki_name="work",
+    )
+    with patch.object(agent, "_run_openai", return_value="ok"):
+        agent.run("hi")
+    assert has_session("work")
+    loaded = load_session("work")
+    assert loaded["messages"] == agent.messages
+
+
+def test_agent_clear_history_deletes_session(capsys, tmp_wiki_config, tmp_sessions_dir):
+    """WikiAgent.clear_history() also deletes the session file."""
+    from wiki_cli.ai.agent import WikiAgent
+    from wiki_cli.ai.config import AIConfig
+    from wiki_cli.ai.sessions import has_session, save_session
+
+    agent = WikiAgent(
+        config=AIConfig(provider="openrouter", api_key="x", model="m", base_url=""),
+        wiki_client=MagicMock(),
+        wiki_name="work",
+    )
+    save_session("work", [{"role": "user", "content": "x"}])
+    assert has_session("work")
+    agent.clear_history()
+    assert not has_session("work")
+
+
+def test_agent_warns_on_80pct_context(tmp_sessions_dir, tmp_wiki_config, capsys):
+    """Warning fires once when estimate crosses 80% of MAX_CONTEXT_TOKENS."""
+    from wiki_cli.ai.agent import MAX_CONTEXT_TOKENS, WikiAgent
+    from wiki_cli.ai.config import AIConfig
+
+    agent = WikiAgent(
+        config=AIConfig(provider="openrouter", api_key="x", model="m", base_url=""),
+        wiki_client=MagicMock(),
+        wiki_name="work",
+    )
+    # Inject messages that exceed 80% of MAX_CONTEXT_TOKENS (~80k tokens).
+    # 4 chars per token estimate, so 80k tokens = 320k chars total.
+    big = "x" * 350_000
+    agent.messages = [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": big},
+    ]
+    with patch("sys.stderr") as mock_stderr:
+        agent._check_token_warning()
+    assert MAX_CONTEXT_TOKENS == 100_000
+    output = str(mock_stderr.write.call_args_list[0])
+    assert "approaching" in output.lower() or "warning" in output.lower()

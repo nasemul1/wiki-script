@@ -48,7 +48,7 @@ TOOL_LABELS = {
     "jira_get_transitions": "Jira: Getting transitions",
 }
 
-MAX_CONTEXT_TOKENS = 50_000
+MAX_CONTEXT_TOKENS = 100_000
 
 SYSTEM_PROMPT = """You are a Wiki.js and Jira assistant. You manage wiki pages and Jira issues using the tools provided.
 
@@ -76,6 +76,7 @@ class WikiAgent:
         self,
         config: AIConfig | None = None,
         wiki_client: WikiJSClient | None = None,
+        wiki_name: str | None = None,
     ) -> None:
         self.config = config or AIConfig()
         if wiki_client is None:
@@ -86,6 +87,8 @@ class WikiAgent:
             self.wiki_client = wiki_client
         self.pages = PagesManager(self.wiki_client)
         self.client = self.config.get_client()
+        self.wiki_name = wiki_name
+        self._warned_at_80pct = False
         self.messages: list[dict[str, Any]] = [
             {"role": "system", "content": SYSTEM_PROMPT},
         ]
@@ -106,20 +109,49 @@ class WikiAgent:
         """Process a user prompt and return the AI's response.
 
         Maintains conversation history across calls so the LLM retains context.
-
-        Args:
-            user_prompt: The user's natural language request.
-
-        Returns:
-            The AI's text response.
+        Persists history to disk after each response when wiki_name is set.
         """
-        return self._run_openai(user_prompt)
+        result = self._run_openai(user_prompt)
+        if self.wiki_name:
+            try:
+                from wiki_cli.ai.sessions import save_session
+
+                save_session(self.wiki_name, self.messages)
+            except Exception:
+                pass  # non-fatal
+        return result
 
     def clear_history(self) -> None:
-        """Reset conversation history, keeping only the system prompt."""
+        """Reset conversation history, keeping only the system prompt.
+        Also deletes the on-disk session file if wiki_name is set.
+        """
         self.messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
         ]
+        self._warned_at_80pct = False
+        if self.wiki_name:
+            try:
+                from wiki_cli.ai.sessions import delete_session
+
+                delete_session(self.wiki_name)
+            except Exception:
+                pass
+
+    def _check_token_warning(self) -> None:
+        """Print a one-time warning when token estimate crosses 80% of MAX_CONTEXT_TOKENS."""
+        if self._warned_at_80pct:
+            return
+        estimated = self._estimate_tokens(self.messages)
+        threshold = int(MAX_CONTEXT_TOKENS * 0.8)
+        if estimated >= threshold:
+            import sys
+
+            print(
+                f"\n⚠ context approaching {MAX_CONTEXT_TOKENS // 1000}k limit "
+                f"(~{estimated // 1000}k tokens). Older messages will be trimmed.",
+                file=sys.stderr,
+            )
+            self._warned_at_80pct = True
 
     def _estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
         total = 0
@@ -133,6 +165,7 @@ class WikiAgent:
         return total
 
     def _trim_history(self) -> None:
+        self._check_token_warning()
         if self._estimate_tokens(self.messages) <= MAX_CONTEXT_TOKENS:
             return
 
